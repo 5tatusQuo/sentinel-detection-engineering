@@ -117,6 +117,7 @@ param groupByFields string = 'UserPrincipalName'
 resource sentinelRule 'Microsoft.SecurityInsights/alertRules@2025-06-01' = {
   name: guid(resourceGroup().id, ruleDisplayName)
   location: resourceGroup().location
+  kind: 'Scheduled'
   
   properties: {
     displayName: ruleDisplayName
@@ -172,11 +173,11 @@ resource sentinelRule 'Microsoft.SecurityInsights/alertRules@2025-06-01' = {
     }
     
     customDetails: {
-      'LoginCount': 'LoginCount'
-      'TimeSpan': 'TimeSpan'
-      'Applications': 'Applications'
-      'IPAddresses': 'IPAddresses'
-      'Locations': 'Locations'
+      LoginCount: 'LoginCount'
+      TimeSpan: 'TimeSpan'
+      Applications: 'Applications'
+      IPAddresses: 'IPAddresses'
+      Locations: 'Locations'
     }
   }
 }

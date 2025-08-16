@@ -66,6 +66,7 @@ param groupByFields string = 'Computer,SubjectUserName'
 resource sentinelRule 'Microsoft.SecurityInsights/alertRules@2025-06-01' = {
   name: guid(resourceGroup().id, ruleName)
   location: resourceGroup().location
+  kind: 'Scheduled'
   properties: {
     displayName: ruleName
     description: 'Detects PowerShell commands that use encoded commands, which is a common technique used by attackers to obfuscate malicious PowerShell code and evade detection.'
@@ -113,8 +114,8 @@ resource sentinelRule 'Microsoft.SecurityInsights/alertRules@2025-06-01' = {
       alertDescriptionFormat: 'A suspicious PowerShell encoded command was detected on {Computer} by user {SubjectUserName}.'
     }
     customDetails: {
-      'EncodedCommand': 'EncodedCommand'
-      'DecodedCommand': 'DecodedCommand'
+      EncodedCommand: 'EncodedCommand'
+      DecodedCommand: 'DecodedCommand'
     }
   }
 }

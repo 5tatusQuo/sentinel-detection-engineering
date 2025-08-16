@@ -108,52 +108,43 @@ param groupingMethod string = 'GroupByAlertDetails'
 param groupByFields string = 'IPAddress,AppDisplayName'
 
 // =============================================================================
-// STEP 6: THE ACTUAL RULE (Putting it all together)
+// STEP 6: THE ACTUAL RULE
 // =============================================================================
 resource sentinelRule 'Microsoft.SecurityInsights/alertRules@2025-06-01' = {
-  // Give the rule a unique name (this will be auto-generated)
   name: guid(resourceGroup().id, ruleDisplayName)
-  
-  // Where to deploy this rule
   location: resourceGroup().location
+  kind: 'Scheduled'
   
-  // All the rule settings
   properties: {
-    // Basic information
     displayName: ruleDisplayName
     description: 'Detects multiple failed login attempts from the same IP address, which could indicate a brute force attack or credential stuffing attempt.'
     enabled: ruleEnabled
     severity: ruleSeverity
     
-    // The detection logic
     query: detectionQuery
     queryFrequency: queryFrequency
     queryPeriod: queryPeriod
     
-    // When to trigger the alert
     triggerOperator: 'GreaterThan'
     triggerThreshold: 0
     
-    // Attack framework mapping
     tactics: attackTactics
     techniques: attackTechniques
     
-    // Incident creation settings
     incidentConfiguration: {
       createIncident: createIncident
       groupingConfiguration: {
         enabled: groupAlerts
-        lookbackDuration: 'PT5M'  // Group alerts within 5 minutes
+        lookbackDuration: 'PT5M'
         matchingMethod: groupingMethod
         groupByEntities: groupByFields != '' ? split(groupByFields, ',') : []
         reopenClosedIncident: false
       }
     }
     
-    // What entities to extract (for investigation)
     entityMappings: [
       {
-        entityType: 'IP'  // Extract IP addresses as entities
+        entityType: 'IP'
         fieldMappings: [
           {
             identifier: 'Address'
@@ -162,7 +153,7 @@ resource sentinelRule 'Microsoft.SecurityInsights/alertRules@2025-06-01' = {
         ]
       }
       {
-        entityType: 'Account'  // Extract usernames as entities
+        entityType: 'Account'
         fieldMappings: [
           {
             identifier: 'Name'
@@ -172,17 +163,15 @@ resource sentinelRule 'Microsoft.SecurityInsights/alertRules@2025-06-01' = {
       }
     ]
     
-    // Customize the alert details
     alertDetailsOverride: {
       alertDisplayNameFormat: 'Suspicious Login Attempts Detected from {IPAddress}'
       alertDescriptionFormat: 'Multiple failed login attempts ({FailedAttempts}) detected from IP address {IPAddress} to application {AppDisplayName}.'
     }
     
-    // Add custom details for investigation
     customDetails: {
-      'FailedAttempts': 'FailedAttempts'
-      'AppDisplayName': 'AppDisplayName'
-      'UserNames': 'UserNames'
+      FailedAttempts: 'FailedAttempts'
+      AppDisplayName: 'AppDisplayName'
+      UserNames: 'UserNames'
     }
   }
 }
