@@ -58,6 +58,18 @@ jobs:
       with:
         fetch-depth: 2  # Need at least 2 commits to detect changes
     
+    - name: Debug file structure (detect-deployment-needs)
+      run: |
+        echo "=== DEBUG: detect-deployment-needs job ==="
+        echo "Current directory: $(pwd)"
+        echo "Listing files:"
+        ls -la
+        echo "Listing env directory:"
+        ls -la env/ || echo "env directory not found"
+        echo "Listing infra directory:"
+        ls -la infra/ || echo "infra directory not found"
+        echo "=== END DEBUG ==="
+    
     - name: Install Azure CLI
       run: |
         curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
