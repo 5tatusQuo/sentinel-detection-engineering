@@ -26,6 +26,11 @@ on:
         required: false
         default: false
         type: boolean
+      force_deploy_all:
+        description: 'Force deploy all rules (ignore changes)'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   id-token: write
@@ -38,8 +43,54 @@ env:
   AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
 
 jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      changed-rules: ${{ steps.get-changed-files.outputs.changed-rules }}
+      has-changes: ${{ steps.get-changed-files.outputs.has-changes }}
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 2  # Need at least 2 commits to detect changes
+    
+    - name: Get changed files
+      id: get-changed-files
+      run: |
+        # Get list of changed files
+        if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+          if [ "${{ inputs.force_deploy_all }}" == "true" ]; then
+            echo "Force deploy all rules requested"
+            echo "changed-rules=$(find rules/custom -name "*.bicep" -printf "%f\n" | tr '\n' ' ')" >> $GITHUB_OUTPUT
+            echo "has-changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "Manual workflow dispatch - no changes detected"
+            echo "changed-rules=" >> $GITHUB_OUTPUT
+            echo "has-changes=false" >> $GITHUB_OUTPUT
+          fi
+        else
+          # For push/PR events, detect actual changes
+          echo "Detecting changed files..."
+          CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD | grep -E "rules/custom/.*\.(bicep|jsonc)$" || true)
+          
+          if [ -z "$CHANGED_FILES" ]; then
+            echo "No relevant files changed"
+            echo "changed-rules=" >> $GITHUB_OUTPUT
+            echo "has-changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "Changed files: $CHANGED_FILES"
+            # Extract just the Bicep file names (without extension) that have changes
+            CHANGED_RULES=$(echo "$CHANGED_FILES" | grep "\.bicep$" | xargs -n1 basename -s .bicep | tr '\n' ' ')
+            echo "Changed rules: $CHANGED_RULES"
+            echo "changed-rules=$CHANGED_RULES" >> $GITHUB_OUTPUT
+            echo "has-changes=true" >> $GITHUB_OUTPUT
+          fi
+        fi
+
   build-validate:
     runs-on: ubuntu-latest
+    needs: detect-changes
     if: ${{ !inputs.skip_validation || github.event_name != 'workflow_dispatch' }}
     
     steps:
@@ -66,26 +117,42 @@ jobs:
     - name: Validate Bicep templates
       run: |
         echo "Validating Bicep templates..."
-        for file in rules/custom/*.bicep; do
-          if [ -f "$file" ]; then
-            echo "Building $file"
-            az bicep build --file "$file"
-            if [ $? -ne 0 ]; then
-              echo "❌ Bicep validation failed for $file"
-              exit 1
+        if [ "${{ needs.detect-changes.outputs.has-changes }}" == "true" ]; then
+          # Only validate changed rules
+          for rule in ${{ needs.detect-changes.outputs.changed-rules }}; do
+            file="rules/custom/${rule}.bicep"
+            if [ -f "$file" ]; then
+              echo "Building $file"
+              az bicep build --file "$file"
+              if [ $? -ne 0 ]; then
+                echo "❌ Bicep validation failed for $file"
+                exit 1
+              fi
             fi
-          fi
-        done
+          done
+        else
+          # If no changes detected, validate all rules
+          for file in rules/custom/*.bicep; do
+            if [ -f "$file" ]; then
+              echo "Building $file"
+              az bicep build --file "$file"
+              if [ $? -ne 0 ]; then
+                echo "❌ Bicep validation failed for $file"
+                exit 1
+              fi
+            fi
+          done
+        fi
         echo "✅ All Bicep templates validated successfully"
     
     - name: What-if deployment (Dev)
       run: |
         echo "Running what-if deployment for Dev environment..."
-        for file in rules/custom/*.bicep; do
-          if [ -f "$file" ]; then
-            # Extract the base name without extension
-            basename=$(basename "$file" .bicep)
-            param_file="rules/custom/params/dev-${basename}.jsonc"
+        if [ "${{ needs.detect-changes.outputs.has-changes }}" == "true" ]; then
+          # Only what-if for changed rules
+          for rule in ${{ needs.detect-changes.outputs.changed-rules }}; do
+            file="rules/custom/${rule}.bicep"
+            param_file="rules/custom/params/dev-${rule}.jsonc"
             
             echo "What-if for $file using $param_file"
             if [ -f "$param_file" ]; then
@@ -97,8 +164,27 @@ jobs:
             else
               echo "⚠️  Parameter file $param_file not found, skipping $file"
             fi
-          fi
-        done
+          done
+        else
+          # If no changes detected, what-if all rules
+          for file in rules/custom/*.bicep; do
+            if [ -f "$file" ]; then
+              basename=$(basename "$file" .bicep)
+              param_file="rules/custom/params/dev-${basename}.jsonc"
+              
+              echo "What-if for $file using $param_file"
+              if [ -f "$param_file" ]; then
+                az deployment group what-if \
+                  --resource-group ${{ secrets.SENTINEL_RG_DEV }} \
+                  --template-file "$file" \
+                  --parameters "$param_file" \
+                  --no-pretty-print
+              else
+                echo "⚠️  Parameter file $param_file not found, skipping $file"
+              fi
+            fi
+          done
+        fi
         echo "✅ What-if deployment completed successfully"
     
     - name: Smoke test queries
@@ -112,7 +198,7 @@ jobs:
         echo "✅ Smoke tests completed (placeholder)"
 
   deploy-dev:
-    needs: build-validate
+    needs: [detect-changes, build-validate]
     runs-on: ubuntu-latest
     if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.environment == 'dev')
     
@@ -140,11 +226,11 @@ jobs:
     - name: Deploy to Dev
       run: |
         echo "Deploying to Dev environment..."
-        for file in rules/custom/*.bicep; do
-          if [ -f "$file" ]; then
-            # Extract the base name without extension
-            basename=$(basename "$file" .bicep)
-            param_file="rules/custom/params/dev-${basename}.jsonc"
+        if [ "${{ needs.detect-changes.outputs.has-changes }}" == "true" ]; then
+          # Only deploy changed rules
+          for rule in ${{ needs.detect-changes.outputs.changed-rules }}; do
+            file="rules/custom/${rule}.bicep"
+            param_file="rules/custom/params/dev-${rule}.jsonc"
             
             echo "Deploying $file using $param_file"
             if [ -f "$param_file" ]; then
@@ -156,8 +242,27 @@ jobs:
             else
               echo "⚠️  Parameter file $param_file not found, skipping $file"
             fi
-          fi
-        done
+          done
+        else
+          # If no changes detected, deploy all rules
+          for file in rules/custom/*.bicep; do
+            if [ -f "$file" ]; then
+              basename=$(basename "$file" .bicep)
+              param_file="rules/custom/params/dev-${basename}.jsonc"
+              
+              echo "Deploying $file using $param_file"
+              if [ -f "$param_file" ]; then
+                az deployment group create \
+                  --resource-group ${{ secrets.SENTINEL_RG_DEV }} \
+                  --template-file "$file" \
+                  --parameters "$param_file" \
+                  --verbose
+              else
+                echo "⚠️  Parameter file $param_file not found, skipping $file"
+              fi
+            fi
+          done
+        fi
         echo "✅ Dev deployment completed successfully"
     
     - name: Verify deployment
@@ -171,7 +276,7 @@ jobs:
           --output table
 
   deploy-prod:
-    needs: [build-validate, deploy-dev]
+    needs: [detect-changes, build-validate, deploy-dev]
     runs-on: ubuntu-latest
     if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.environment == 'prod')
     environment: sentinel-prod
@@ -200,11 +305,11 @@ jobs:
     - name: Deploy to Prod
       run: |
         echo "Deploying to Production environment..."
-        for file in rules/custom/*.bicep; do
-          if [ -f "$file" ]; then
-            # Extract the base name without extension
-            basename=$(basename "$file" .bicep)
-            param_file="rules/custom/params/prod-${basename}.jsonc"
+        if [ "${{ needs.detect-changes.outputs.has-changes }}" == "true" ]; then
+          # Only deploy changed rules
+          for rule in ${{ needs.detect-changes.outputs.changed-rules }}; do
+            file="rules/custom/${rule}.bicep"
+            param_file="rules/custom/params/prod-${rule}.jsonc"
             
             echo "Deploying $file using $param_file"
             if [ -f "$param_file" ]; then
@@ -216,8 +321,27 @@ jobs:
             else
               echo "⚠️  Parameter file $param_file not found, skipping $file"
             fi
-          fi
-        done
+          done
+        else
+          # If no changes detected, deploy all rules
+          for file in rules/custom/*.bicep; do
+            if [ -f "$file" ]; then
+              basename=$(basename "$file" .bicep)
+              param_file="rules/custom/params/prod-${basename}.jsonc"
+              
+              echo "Deploying $file using $param_file"
+              if [ -f "$param_file" ]; then
+                az deployment group create \
+                  --resource-group ${{ secrets.SENTINEL_RG_PROD }} \
+                  --template-file "$file" \
+                  --parameters "$param_file" \
+                  --verbose
+              else
+                echo "⚠️  Parameter file $param_file not found, skipping $file"
+              fi
+            fi
+          done
+        fi
         echo "✅ Production deployment completed successfully"
     
     - name: Verify production deployment
