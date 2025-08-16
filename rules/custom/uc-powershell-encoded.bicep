@@ -5,10 +5,13 @@ var x_metadata = {
   owner: 'Detection Engineering'
 }
 
-@description('Rule display name override (optional)')
+@description('Reference to the Log Analytics workspace')
+param workspace resource
+
+@description('The name that will appear in the Sentinel portal')
 param ruleName string = '[ORG] – Suspicious PowerShell (EncodedCommand)'
 
-@description('Rule severity')
+@description('How serious is this threat?')
 @allowed([
   'Critical'
   'High'
@@ -18,10 +21,10 @@ param ruleName string = '[ORG] – Suspicious PowerShell (EncodedCommand)'
 ])
 param severity string = 'Medium'
 
-@description('Enable or disable the rule')
+@description('Should this rule be turned on?')
 param enabled bool = true
 
-@description('Detection query')
+@description('The KQL query that detects encoded PowerShell')
 param query string = '''
 SecurityEvent
 | where EventID == 4104
@@ -34,24 +37,24 @@ SecurityEvent
 | project TimeGenerated, Computer, SubjectUserName, EncodedCommand, DecodedCommand
 '''
 
-@description('MITRE ATT&CK tactics')
+@description('Which MITRE ATT&CK tactics does this detect?')
 param tactics array = [
   'Execution'
   'DefenseEvasion'
 ]
 
-@description('MITRE ATT&CK techniques')
+@description('Which specific MITRE ATT&CK techniques does this detect?')
 param techniques array = [
   'T1059.001'
 ]
 
-@description('Create incidents for alerts')
+@description('Should this create an incident when triggered?')
 param createIncident bool = true
 
-@description('Group alerts into incidents')
+@description('Should we group similar alerts together?')
 param groupAlerts bool = true
 
-@description('Incident grouping method')
+@description('How should we group alerts?')
 @allowed([
   'SingleAlert'
   'GroupByAlertDetails'
@@ -60,15 +63,12 @@ param groupAlerts bool = true
 ])
 param groupingMethod string = 'GroupByAlertDetails'
 
-@description('Group by fields (comma-separated)')
+@description('Fields to group by (comma-separated)')
 param groupByFields string = 'Computer,SubjectUserName'
 
-@description('Name of the Log Analytics workspace')
-param workspaceName string
-
 resource sentinelRule 'Microsoft.SecurityInsights/alertRules@2025-06-01' = {
-  name: guid(resourceGroup().id, ruleName)
-  location: resourceGroup().location
+  parent: workspace
+  name: guid(workspace.id, ruleName)
   kind: 'Scheduled'
   properties: {
     displayName: ruleName
@@ -82,6 +82,8 @@ resource sentinelRule 'Microsoft.SecurityInsights/alertRules@2025-06-01' = {
     triggerThreshold: 0
     tactics: tactics
     techniques: techniques
+    suppressionEnabled: false
+    suppressionDuration: 'PT0H'
     incidentConfiguration: {
       createIncident: createIncident
       groupingConfiguration: {

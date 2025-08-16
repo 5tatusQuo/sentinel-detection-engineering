@@ -5,19 +5,12 @@
 // This rule helps identify potential privilege escalation or account compromise
 
 // =============================================================================
-// STEP 1: METADATA
+// STEP 1: PARAMETERS (What can be customized)
 // =============================================================================
-@description('Information about this rule')
-var ruleMetadata = {
-  upstreamTemplateGuid: ''
-  upstreamTemplateVersion: ''
-  owner: 'Detection Engineering'
-  description: 'Detects unusual admin account activity patterns'
-}
 
-// =============================================================================
-// STEP 2: PARAMETERS (What can be customized)
-// =============================================================================
+// Workspace reference
+@description('Reference to the Log Analytics workspace')
+param workspace resource
 
 // Basic rule settings
 @description('Display name for the detection rule')
@@ -82,16 +75,12 @@ param groupingMethod string = 'AllEntities'
 @description('Fields to group by (comma-separated)')
 param groupByFields string = 'UserPrincipalName'
 
-// Workspace parameter
-@description('Name of the Log Analytics workspace')
-param workspaceName string
-
 // =============================================================================
-// STEP 3: THE ACTUAL RULE
+// STEP 2: THE ACTUAL RULE
 // =============================================================================
 resource sentinelRule 'Microsoft.SecurityInsights/alertRules@2025-06-01' = {
-  name: guid(resourceGroup().id, ruleDisplayName)
-  location: resourceGroup().location
+  parent: workspace
+  name: guid(workspace.id, ruleDisplayName)
   kind: 'Scheduled'
   
   properties: {
@@ -109,6 +98,9 @@ resource sentinelRule 'Microsoft.SecurityInsights/alertRules@2025-06-01' = {
     
     tactics: attackTactics
     techniques: attackTechniques
+    
+    suppressionEnabled: false
+    suppressionDuration: 'PT0H'
     
     incidentConfiguration: {
       createIncident: createIncident
@@ -158,7 +150,7 @@ resource sentinelRule 'Microsoft.SecurityInsights/alertRules@2025-06-01' = {
 }
 
 // =============================================================================
-// STEP 4: OUTPUTS
+// STEP 3: OUTPUTS
 // =============================================================================
 output ruleName string = sentinelRule.name
 output ruleDisplayName string = sentinelRule.properties.displayName

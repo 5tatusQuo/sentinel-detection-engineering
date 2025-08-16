@@ -2,6 +2,13 @@
   "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
   "contentVersion": "1.0.0.0",
   "parameters": {
+    // Workspace reference
+    "workspace": {
+      "value": {
+        "id": "/subscriptions/${AZURE_SUBSCRIPTION_ID}/resourceGroups/${SENTINEL_RG_DEV}/providers/Microsoft.OperationalInsights/workspaces/${SENTINEL_WS_DEV}"
+      }
+    },
+
     // PowerShell Encoded Command Rule
     "ruleName": {
       "value": "[DEV] [ORG] – Suspicious PowerShell (EncodedCommand)"
@@ -37,9 +44,6 @@
     },
     "groupByFields": {
       "value": "Computer,SubjectUserName"
-    },
-    "workspaceName": {
-      "value": "sentinel-workspace-dev"
     },
 
     // Suspicious Login Attempts Rule
@@ -84,9 +88,6 @@
     "groupByFields": {
       "value": "IPAddress"
     },
-    "workspaceName": {
-      "value": "sentinel-workspace-dev"
-    },
 
     // Admin Account Anomaly Rule
     "ruleDisplayName": {
@@ -130,9 +131,6 @@
     },
     "groupByFields": {
       "value": "UserPrincipalName"
-    },
-    "workspaceName": {
-      "value": "sentinel-workspace-dev"
     }
   }
 }
