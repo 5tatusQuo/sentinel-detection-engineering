@@ -125,6 +125,16 @@ jobs:
         tenant-id: ${{ secrets.AZURE_TENANT_ID }}
         subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
     
+    - name: Debug file structure
+      run: |
+        echo "Current directory: $(pwd)"
+        echo "Listing files:"
+        ls -la
+        echo "Listing env directory:"
+        ls -la env/ || echo "env directory not found"
+        echo "Listing infra directory:"
+        ls -la infra/ || echo "infra directory not found"
+    
     - name: Validate Bicep templates
       run: |
         echo "Validating Bicep templates..."
