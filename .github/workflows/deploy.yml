@@ -91,11 +91,34 @@ jobs:
           CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD | grep -E "(env/|infra/|kql/)" || true)
         fi
         
+        # Check if any rules are missing from Sentinel
+        echo "Checking for missing rules in Sentinel..."
+        DEPLOYED_RULES=$(az sentinel alert-rule list \
+          --resource-group ${{ secrets.SENTINEL_RG_DEV }} \
+          --workspace-name ${{ secrets.SENTINEL_WS_DEV }} \
+          --output json | jq -r '.[].displayName' 2>/dev/null || echo "")
+        
+        echo "Deployed rules: $DEPLOYED_RULES"
+        
+        # Check if our expected rules are missing
+        EXPECTED_RULES="[DEV] [ORG] – Suspicious PowerShell (EncodedCommand) [DEV] [ORG] – Suspicious Login Attempts [DEV] [ORG] – Admin Account Anomaly Detection"
+        MISSING_RULES=""
+        
+        for rule in $EXPECTED_RULES; do
+          if ! echo "$DEPLOYED_RULES" | grep -q "$rule"; then
+            echo "Missing rule: $rule"
+            MISSING_RULES="$MISSING_RULES $rule"
+          fi
+        done
+        
         if [ -n "$CHANGED_FILES" ]; then
           echo "Changes detected in: $CHANGED_FILES"
           echo "needs-deployment=true" >> $GITHUB_OUTPUT
+        elif [ -n "$MISSING_RULES" ]; then
+          echo "Missing rules detected: $MISSING_RULES"
+          echo "needs-deployment=true" >> $GITHUB_OUTPUT
         else
-          echo "No relevant changes detected"
+          echo "No relevant changes or missing rules detected"
           echo "needs-deployment=false" >> $GITHUB_OUTPUT
         fi
 
