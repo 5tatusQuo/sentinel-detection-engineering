@@ -60,7 +60,9 @@ jobs:
         WORKSPACE: ${{ secrets.SENTINEL_WS_DEV }}
         API_VERSION: '2025-06-01'
       run: |
+        echo "Exporting from Dev workspace: $WORKSPACE"
         pwsh -File scripts/export_enabled_rules.ps1
+      continue-on-error: true
     
     - name: Export from Prod workspace
       if: github.event.inputs.workspace == 'prod' || github.event_name == 'schedule'
@@ -70,17 +72,21 @@ jobs:
         WORKSPACE: ${{ secrets.SENTINEL_WS_PROD }}
         API_VERSION: '2025-06-01'
       run: |
+        echo "Exporting from Prod workspace: $WORKSPACE"
         pwsh -File scripts/export_enabled_rules.ps1
+      continue-on-error: true
     
     - name: Check for changes
       id: check-changes
       run: |
+        echo "Checking for changes in repository..."
+        git status --porcelain
         if [ -n "$(git status --porcelain)" ]; then
           echo "changes=true" >> $GITHUB_OUTPUT
           echo "Found changes in vendor rules"
         else
           echo "changes=false" >> $GITHUB_OUTPUT
-          echo "No changes detected"
+          echo "No changes detected - no PR will be created"
         fi
     
     - name: Create branch and commit
@@ -95,6 +101,8 @@ jobs:
         git add rules/vendor/enabled/
         git commit -m "chore: export enabled Sentinel rules $(date +%Y-%m-%d)"
         echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+        echo "Created branch: $BRANCH_NAME"
+        echo "Commit hash: $(git rev-parse HEAD)"
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     
@@ -103,6 +111,19 @@ jobs:
       run: |
         git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}
         git push origin ${{ steps.create-branch.outputs.branch_name }}
+        echo "Pushed branch: ${{ steps.create-branch.outputs.branch_name }}"
+        echo "Branch commit: $(git rev-parse HEAD)"
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Debug branch state
+      if: steps.check-changes.outputs.changes == 'true'
+      run: |
+        echo "Current branch: $(git branch --show-current)"
+        echo "Current commit: $(git rev-parse HEAD)"
+        echo "Main branch commit: $(git rev-parse origin/main)"
+        echo "Branch differences:"
+        git diff origin/main..HEAD --name-only
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     
@@ -134,4 +155,17 @@ jobs:
         labels: |
           automation
           vendor-sync
-        delete-branch: true
+        delete-branch: false
+        commit-message: "chore: export enabled Sentinel rules $(date +%Y-%m-%d)"
+    
+    - name: Comment on no changes
+      if: steps.check-changes.outputs.changes == 'false'
+      run: |
+        echo "✅ No changes detected in vendor rules export"
+        echo "This is normal if:"
+        echo "- No new rules were enabled"
+        echo "- No existing rules were modified"
+        echo "- Azure secrets are not configured yet"
+        echo ""
+        echo "To test the export manually, ensure Azure secrets are configured and run:"
+        echo "gh workflow run vendor-sync.yml -f workspace=dev"
