@@ -22,14 +22,12 @@ param ruleSeverity string = 'Medium'
 @description('The KQL query that detects encoded PowerShell')
 param detectionQuery string = '''
 SecurityEvent
-| where EventID == 4104
-| where EventData contains "EncodedCommand"
-| where EventData contains "powershell"
-| extend EncodedCommand = extract("EncodedCommand\\s*=\\s*([^\\s]+)", 1, EventData)
-| where isnotempty(EncodedCommand)
-| extend DecodedCommand = base64_decode_tostring(EncodedCommand)
-| where DecodedCommand contains "Invoke-Expression" or DecodedCommand contains "IEX"
-| project TimeGenerated, Computer, SubjectUserName, EncodedCommand, DecodedCommand
+| where EventID == 4688
+| where Process has_cs "powershell.exe"
+| where CommandLine has_any (" -enc", "-EncodedCommand")
+| extend EncArg = extract(@"(?i)-enc(?:odedCommand)?\s+(['""])?([A-Za-z0-9+/=]+)\1", 2, CommandLine)
+| where isnotempty(EncArg)
+| project TimeGenerated, Computer, SubjectUserName, CommandLine, EncArg
 '''
 
 @description('How often to run the query')
@@ -119,8 +117,8 @@ resource sentinelRule 'Microsoft.SecurityInsights/alertRules@2025-06-01' = {
       alertDescriptionFormat: 'A suspicious PowerShell command using encoded commands was detected on {Computer} by user {SubjectUserName}. This technique is commonly used by attackers to obfuscate malicious code.'
     }
     customDetails: {
-      EncodedCommand: 'EncodedCommand'
-      DecodedCommand: 'DecodedCommand'
+      EncodedArgument: 'EncArg'
+      CommandLine: 'CommandLine'
     }
   }
 }
