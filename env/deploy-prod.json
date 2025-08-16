@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.37.4.10188",
-      "templateHash": "10164746799288796954"
+      "templateHash": "4106501642826929064"
     }
   },
   "parameters": {
@@ -66,9 +66,11 @@
           "T1078"
         ],
         "createIncident": true,
+        "grouping": {},
         "entities": {
           "ipAddress": "IPAddress"
-        }
+        },
+        "customDetails": {}
       },
       {
         "name": "uc-admin-anomaly",
@@ -93,7 +95,8 @@
         },
         "entities": {
           "accountFullName": "UserPrincipalName"
-        }
+        },
+        "customDetails": {}
       }
     ]
   },

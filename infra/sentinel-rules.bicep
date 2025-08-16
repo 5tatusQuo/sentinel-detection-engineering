@@ -4,8 +4,6 @@ param workspaceName string
 @description('List of scheduled analytics rules to deploy')
 param rules array = []
 
-
-
 module scheduled 'modules/scheduledRule.bicep' = [for r in rules: {
   name: 'rule-${uniqueString(r.name)}'
   scope: resourceGroup()

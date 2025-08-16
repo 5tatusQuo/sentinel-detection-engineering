@@ -44,9 +44,11 @@ var rules = [
     tactics: [ 'InitialAccess' ]
     techniques: [ 'T1078' ]
     createIncident: false
+    grouping: {}
     entities: {
       ipAddress: 'IPAddress'
     }
+    customDetails: {}
   }
   {
     name: 'uc-admin-anomaly'
@@ -66,6 +68,7 @@ var rules = [
     entities: {
       accountFullName: 'UserPrincipalName'
     }
+    customDetails: {}
   }
 ]
 
