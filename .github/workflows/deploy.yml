@@ -81,8 +81,7 @@ jobs:
         DEPLOYED_RULES=$(az sentinel alert-rule list \
           --resource-group ${{ secrets.SENTINEL_RG_DEV }} \
           --workspace-name ${{ secrets.SENTINEL_WS_DEV }} \
-          --query "[].properties.displayName" \
-          --output tsv 2>/dev/null || echo "")
+          --output json | jq -r '.[].displayName' 2>/dev/null || echo "")
         
         echo "Deployed rules: $DEPLOYED_RULES"
         
@@ -99,21 +98,40 @@ jobs:
           # For push/PR events, detect changes
           echo "Detecting changed files..."
           CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD | grep -E "rules/custom/.*\.(bicep|jsonc)$" || true)
-          CHANGED_RULES=$(echo "$CHANGED_FILES" | grep "\.bicep$" | xargs -n1 basename -s .bicep | tr '\n' ' ')
+          
+          if [ -n "$CHANGED_FILES" ]; then
+            CHANGED_RULES=$(echo "$CHANGED_FILES" | grep "\.bicep$" | xargs -n1 basename -s .bicep | tr '\n' ' ')
+          else
+            CHANGED_RULES=""
+          fi
           echo "Changed rules: $CHANGED_RULES"
           
           # Determine which rules need deployment
           RULES_TO_DEPLOY=""
           for rule in $REPO_RULES; do
+            echo "Checking rule: $rule"
+            
+            # Get the display name for this rule from the parameter file
+            PARAM_FILE="rules/custom/params/dev-${rule}.jsonc"
+            if [ -f "$PARAM_FILE" ]; then
+              DISPLAY_NAME=$(grep -A 1 "ruleDisplayName" "$PARAM_FILE" | grep "value" | cut -d'"' -f4)
+              echo "Display name for $rule: '$DISPLAY_NAME'"
+            else
+              echo "Parameter file $PARAM_FILE not found, skipping $rule"
+              continue
+            fi
+            
+            echo "Looking for display name '$DISPLAY_NAME' in deployed rules: '$DEPLOYED_RULES'"
+            
             # Check if rule is missing from Sentinel
-            if ! echo "$DEPLOYED_RULES" | grep -q "$rule"; then
-              echo "Rule $rule is missing from Sentinel - will deploy"
+            if ! echo "$DEPLOYED_RULES" | grep -q "$DISPLAY_NAME"; then
+              echo "Rule $rule (display: $DISPLAY_NAME) is missing from Sentinel - will deploy"
               RULES_TO_DEPLOY="$RULES_TO_DEPLOY $rule"
             elif echo "$CHANGED_RULES" | grep -q "$rule"; then
               echo "Rule $rule has changes - will deploy"
               RULES_TO_DEPLOY="$RULES_TO_DEPLOY $rule"
             else
-              echo "Rule $rule is already deployed and unchanged - skipping"
+              echo "Rule $rule (display: $DISPLAY_NAME) is already deployed and unchanged - skipping"
             fi
           done
         fi
