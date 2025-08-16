@@ -123,8 +123,16 @@ jobs:
             
             echo "Looking for display name '$DISPLAY_NAME' in deployed rules: '$DEPLOYED_RULES'"
             
-            # Check if rule is missing from Sentinel
-            if ! echo "$DEPLOYED_RULES" | grep -q "$DISPLAY_NAME"; then
+            # Check if rule is missing from Sentinel (use pattern matching)
+            RULE_FOUND=false
+            while IFS= read -r deployed_rule; do
+              if [ "$deployed_rule" = "$DISPLAY_NAME" ]; then
+                RULE_FOUND=true
+                break
+              fi
+            done <<< "$DEPLOYED_RULES"
+            
+            if [ "$RULE_FOUND" = false ]; then
               echo "Rule $rule (display: $DISPLAY_NAME) is missing from Sentinel - will deploy"
               RULES_TO_DEPLOY="$RULES_TO_DEPLOY $rule"
             elif echo "$CHANGED_RULES" | grep -q "$rule"; then
