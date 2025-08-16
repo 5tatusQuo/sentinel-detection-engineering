@@ -46,7 +46,7 @@ param attackTactics array = [
 
 @description('Which specific MITRE ATT&CK techniques does this detect?')
 param attackTechniques array = [
-  'T1059.001'
+  'T1059'
 ]
 
 @description('Should this create an incident when triggered?')
@@ -119,8 +119,8 @@ resource sentinelRule 'Microsoft.SecurityInsights/alertRules@2025-06-01' = {
       alertDescriptionFormat: 'A suspicious PowerShell command using encoded commands was detected on {Computer} by user {SubjectUserName}. This technique is commonly used by attackers to obfuscate malicious code.'
     }
     customDetails: {
-      'Encoded Command': '{{EncodedCommand}}'
-      'Decoded Command': '{{DecodedCommand}}'
+      EncodedCommand: 'EncodedCommand'
+      DecodedCommand: 'DecodedCommand'
     }
   }
 }

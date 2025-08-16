@@ -31,7 +31,7 @@
     },
     "attackTechniques": {
       "value": [
-        "T1059.001"
+        "T1059"
       ]
     },
     "createIncident": {
