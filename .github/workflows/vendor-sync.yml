@@ -111,6 +111,7 @@ jobs:
       uses: peter-evans/create-pull-request@v5
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
+        base: main
         branch: ${{ steps.create-branch.outputs.branch_name }}
         title: "chore: export enabled Sentinel rules $(date +%Y-%m-%d)"
         body: |
