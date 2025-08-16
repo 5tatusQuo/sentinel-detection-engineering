@@ -3,7 +3,7 @@
   "contentVersion": "1.0.0.0",
   "parameters": {
     "workspaceName": {
-      "value": "sentinel-ws-dev"
+      "value": "sentinel-rg-dev"
     },
     "ruleDisplayName": {
       "value": "[DEV] [ORG] – Suspicious PowerShell (EncodedCommand)"
