@@ -89,51 +89,13 @@ jobs:
           echo "No changes detected - no PR will be created"
         fi
     
-    - name: Create branch and commit
-      id: create-branch
-      if: steps.check-changes.outputs.changes == 'true'
-      run: |
-        # Create branch name with date
-        BRANCH_NAME="chore/export-enabled-rules-$(date +%Y-%m-%d)"
-        git config --local user.email "action@github.com"
-        git config --local user.name "GitHub Action"
-        git checkout -b "$BRANCH_NAME"
-        git add rules/vendor/enabled/
-        git commit -m "chore: export enabled Sentinel rules $(date +%Y-%m-%d)"
-        echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
-        echo "Created branch: $BRANCH_NAME"
-        echo "Commit hash: $(git rev-parse HEAD)"
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    
-    - name: Push branch
-      if: steps.check-changes.outputs.changes == 'true'
-      run: |
-        git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}
-        git push origin ${{ steps.create-branch.outputs.branch_name }}
-        echo "Pushed branch: ${{ steps.create-branch.outputs.branch_name }}"
-        echo "Branch commit: $(git rev-parse HEAD)"
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    
-    - name: Debug branch state
-      if: steps.check-changes.outputs.changes == 'true'
-      run: |
-        echo "Current branch: $(git branch --show-current)"
-        echo "Current commit: $(git rev-parse HEAD)"
-        echo "Main branch commit: $(git rev-parse origin/main)"
-        echo "Branch differences:"
-        git diff origin/main..HEAD --name-only
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    
     - name: Create Pull Request
       if: steps.check-changes.outputs.changes == 'true'
       uses: peter-evans/create-pull-request@v5
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
         base: main
-        branch: ${{ steps.create-branch.outputs.branch_name }}
+        branch: "chore/export-enabled-rules-$(date +%Y-%m-%d)"
         title: "chore: export enabled Sentinel rules $(date +%Y-%m-%d)"
         body: |
           ## Automated Vendor Rule Export
