@@ -1,250 +1,269 @@
 # Creating Your First Detection Rule
 
-This guide will walk you through creating your first Microsoft Sentinel detection rule using our beginner-friendly template.
+Welcome! This guide will walk you through creating your first Microsoft Sentinel detection rule using our beginner-friendly, data-driven approach.
 
 ## 🎯 What You'll Learn
 
 - How to create a detection rule from scratch
-- Understanding each part of the Bicep template
-- How to customize the rule for your environment
-- How to test and deploy your rule
+- Understanding the new data-driven architecture
+- How to write effective KQL queries
+- How to test and deploy your rule safely
 
 ## 📋 Prerequisites
 
 - Basic understanding of KQL (Kusto Query Language)
 - Access to the repository
 - Azure Sentinel workspace set up
+- Azure CLI installed and logged in
 
 ## 🚀 Step-by-Step Guide
 
-### Step 1: Copy the Template
+### Step 1: Plan Your Detection
 
-1. **Find the template**: Look at `rules/custom/suspicious-login-attempts.bicep`
-2. **Copy it**: Create a new file with your rule name
-3. **Rename it**: Use a descriptive name like `my-first-rule.bicep`
+Before you start coding, think about:
+- **What are you trying to detect?** (e.g., suspicious logins, malware activity)
+- **What data source will you use?** (e.g., SigninLogs, SecurityEvent, AuditLogs)
+- **What's the threshold?** (e.g., 5 failed logins in 5 minutes)
+- **What ATT&CK technique does this map to?** (e.g., T1078 for credential access)
 
-### Step 2: Understand the Structure
+### Step 2: Create Your KQL Query
 
-The template is divided into 7 clear sections:
+Create a new file in the `kql/` directory:
 
-```
-1. METADATA     - Information about the rule
-2. PARAMETERS   - Values you can change
-3. DETECTION QUERY - The KQL query that finds threats
-4. ATTACK FRAMEWORK - MITRE ATT&CK mapping
-5. INCIDENT SETTINGS - How to handle alerts
-6. THE ACTUAL RULE - Putting it all together
-7. OUTPUTS - Information returned after deployment
+```bash
+# Create your KQL file
+touch kql/my-first-detection.kql
 ```
 
-### Step 3: Customize Your Rule
-
-#### A. Change the Rule Name
-```bicep
-param ruleDisplayName string = '[ORG] – My First Detection Rule (T1234)'
-```
-
-#### B. Set the Severity
-```bicep
-param ruleSeverity string = 'Medium'  // Critical, High, Medium, Low, Informational
-```
-
-#### C. Write Your Detection Query
-This is the most important part! Here's a simple example:
+Write your detection query. Here's a simple example for detecting multiple failed logins:
 
 ```kql
-// Look for suspicious activity
+// kql/my-first-detection.kql
 SigninLogs
-| where ResultType == "50126"  // Failed login
-| where TimeGenerated >= ago(1h)  // Last hour
-| summarize FailedAttempts = count() by IPAddress
-| where FailedAttempts >= 5  // Alert if 5+ failed attempts
+| where TimeGenerated > ago(1h)
+| where ResultType != 0  // Failed logins only
+| summarize FailedCount = count(), 
+          Applications = make_set(AppDisplayName), 
+          Locations = make_set(Location), 
+          TimeSpan = max(TimeGenerated) - min(TimeGenerated) 
+    by IPAddress, bin(TimeGenerated, 5m)
+| where FailedCount >= 5  // Alert if 5+ failed attempts
+| where TimeSpan < 30m    // Within 30 minutes
+| take 100
 ```
 
-#### D. Map to ATT&CK Framework
+**Tips for writing good KQL:**
+- Start simple and add complexity gradually
+- Test your query in Sentinel Logs first
+- Use `summarize` to group and count events
+- Add time filters to avoid querying too much data
+- Use `take` to limit results
+
+### Step 3: Test Your KQL Query
+
+1. **Go to your Sentinel workspace**
+2. **Open Logs**
+3. **Paste your KQL query**
+4. **Click "Run"** to see if it works
+5. **Check the results** - do they look right?
+
+### Step 4: Add Your Rule to Dev Environment
+
+Open `env/deploy-dev.bicep` and add your rule to the `rules` array:
+
 ```bicep
-param attackTactics array = [
-  'Initial Access'    // What tactic does this detect?
-]
+// Load your KQL file
+var kqlMyDetection = loadTextContent('../kql/my-first-detection.kql')
 
-param attackTechniques array = [
-  'T1078'  // What specific technique?
+var rules = [
+  // ... existing rules ...
+  {
+    name: 'uc-my-first-detection'                    // Unique identifier
+    displayName: '[DEV] [ORG] – My First Detection'  // Name in Sentinel
+    kql: kqlMyDetection                              // Your KQL query
+    severity: 'Medium'                               // How serious is this?
+    enabled: true                                    // Turn it on
+    frequency: 'PT1H'                                // Run every hour
+    period: 'PT1H'                                   // Look back 1 hour
+    tactics: [ 'InitialAccess' ]                     // ATT&CK tactics
+    techniques: [ 'T1078' ]                          // ATT&CK techniques
+    createIncident: false                            // No incidents in dev
+    grouping: {}                                     // Use default grouping
+    entities: {                                      // Extract entities
+      ipAddress: 'IPAddress'
+    }
+    customDetails: {}                                // No custom details
+  }
 ]
 ```
 
-### Step 4: Test Your Rule
+### Step 5: Add Your Rule to Prod Environment
 
-#### A. Build the Template
+Copy the same rule to `env/deploy-prod.bicep` but adjust for production:
+
+```bicep
+{
+  name: 'uc-my-first-detection'
+  displayName: '[PROD] [ORG] – My First Detection'  // Changed to PROD
+  kql: kqlMyDetection
+  severity: 'High'                                   // Higher severity for prod
+  enabled: true
+  frequency: 'PT1H'
+  period: 'PT1H'
+  tactics: [ 'InitialAccess' ]
+  techniques: [ 'T1078' ]
+  createIncident: true                               // Create incidents in prod
+  grouping: {}
+  entities: {
+    ipAddress: 'IPAddress'
+  }
+  customDetails: {}
+}
+```
+
+### Step 6: Test Locally
+
+Before you deploy, test that everything works:
+
 ```bash
-az bicep build --file rules/custom/my-first-rule.bicep
+# Test that your Bicep files are valid
+az bicep build --file env/deploy-dev.bicep
+
+# See what would be deployed (without actually deploying)
+az deployment group what-if \
+  --resource-group your-dev-resource-group \
+  --template-file env/deploy-dev.bicep \
+  --parameters env/params/dev.jsonc
 ```
 
-#### B. Test the Query
-1. Go to your Sentinel workspace
-2. Open Logs
-3. Paste your KQL query
-4. Click "Run" to see if it works
+### Step 7: Deploy Your Rule
 
-#### C. What-if Deployment
+1. **Create a Pull Request** with your changes
+2. **The pipeline will automatically**:
+   - Validate your Bicep files
+   - Deploy to Dev environment
+   - Run tests
+3. **Wait for approval** before it goes to Prod
+
+## 🎯 Understanding Each Part
+
+### Rule Configuration
+
+| Property | What it does | Example |
+|----------|-------------|---------|
+| `name` | Unique identifier | `'uc-my-detection'` |
+| `displayName` | Name in Sentinel portal | `'[DEV] [ORG] – My Detection'` |
+| `kql` | Your detection query | `kqlMyDetection` |
+| `severity` | How serious is this? | `'Medium'`, `'High'`, `'Critical'` |
+| `enabled` | Turn rule on/off | `true` or `false` |
+| `frequency` | How often to run | `'PT1H'` (every hour) |
+| `period` | How far back to look | `'PT1H'` (last hour) |
+
+### ATT&CK Mapping
+
+```bicep
+tactics: [ 'InitialAccess', 'Execution' ]    // High-level tactics
+techniques: [ 'T1078', 'T1059' ]             // Specific techniques
+```
+
+**Common ATT&CK Tactics:**
+- `InitialAccess` - Getting into the network
+- `Execution` - Running code
+- `Persistence` - Staying in the network
+- `PrivilegeEscalation` - Getting higher permissions
+- `DefenseEvasion` - Avoiding detection
+
+### Entity Mapping
+
+Tell Sentinel what entities to extract from your alerts:
+
+```bicep
+entities: {
+  accountFullName: 'SubjectUserName'  // Extract Account entity
+  hostName: 'Computer'                // Extract Host entity
+  ipAddress: 'IPAddress'              // Extract IP entity
+}
+```
+
+### Custom Details
+
+Add custom fields to your alerts:
+
+```bicep
+customDetails: {
+  FailedAttempts: 'FailedCount'       // Add custom field
+  Applications: 'Applications'        // Add another field
+}
+```
+
+## 🧪 Testing Your Rule
+
+### 1. Test the KQL Query
+- Run it in Sentinel Logs
+- Check the results make sense
+- Verify it doesn't return too much data
+
+### 2. Test the Bicep Template
+```bash
+az bicep build --file env/deploy-dev.bicep
+```
+
+### 3. Test the Deployment
 ```bash
 az deployment group what-if \
-  --resource-group YOUR_RG \
-  --template-file rules/custom/my-first-rule.bicep \
-  --parameters rules/custom/params/dev.jsonc
+  --resource-group your-dev-rg \
+  --template-file env/deploy-dev.bicep \
+  --parameters env/params/dev.jsonc
 ```
 
-### Step 5: Add Parameters
+### 4. Monitor Your Rule
+- Check that it's enabled in Sentinel
+- Look for alerts being generated
+- Verify the severity and details are correct
 
-Add your rule's parameters to the environment files:
+## 🆘 Common Issues and Solutions
 
-#### Dev Environment (`rules/custom/params/dev.jsonc`)
-```json
-{
-  "parameters": {
-    "ruleDisplayName": {
-      "value": "[ORG] – My First Rule [DEV]"
-    },
-    "ruleSeverity": {
-      "value": "Low"
-    },
-    "ruleEnabled": {
-      "value": true
-    }
-  }
-}
-```
+### "Property doesn't exist" Error
+**Problem**: Missing properties in your rule object
+**Solution**: Make sure all rule objects have `grouping: {}` and `customDetails: {}`
 
-#### Prod Environment (`rules/custom/params/prod.jsonc`)
-```json
-{
-  "parameters": {
-    "ruleDisplayName": {
-      "value": "[ORG] – My First Rule"
-    },
-    "ruleSeverity": {
-      "value": "Medium"
-    },
-    "ruleEnabled": {
-      "value": true
-    }
-  }
-}
-```
+### KQL Column Errors
+**Problem**: Referencing columns that don't exist in your query
+**Solution**: Check that your KQL actually returns the columns you're referencing
 
-### Step 6: Deploy Your Rule
+### No Alerts Generated
+**Problem**: Rule is running but not finding anything
+**Solution**: 
+- Check your KQL query returns results in Sentinel Logs
+- Verify your data sources are enabled
+- Check the time range and frequency settings
 
-1. **Create a Pull Request**
-   ```bash
-   git add rules/custom/my-first-rule.bicep
-   git add rules/custom/params/dev.jsonc
-   git add rules/custom/params/prod.jsonc
-   git commit -m "feat: add my first detection rule"
-   git push origin my-feature-branch
-   ```
-
-2. **Review and Merge**
-   - The pipeline will automatically deploy to Dev
-   - You'll need approval for Prod deployment
-
-## 🔍 Common Patterns
-
-### Pattern 1: Count-based Detection
-```kql
-// Count events and alert if threshold exceeded
-YourTable
-| where TimeGenerated >= ago(1h)
-| summarize EventCount = count() by Field1, Field2
-| where EventCount >= 10
-```
-
-### Pattern 2: Time-based Detection
-```kql
-// Alert if events happen too quickly
-YourTable
-| where TimeGenerated >= ago(1h)
-| summarize TimeSpan = max(TimeGenerated) - min(TimeGenerated) by Field1
-| where TimeSpan < 5m  // Less than 5 minutes
-```
-
-### Pattern 3: Anomaly Detection
-```kql
-// Alert if activity is unusual
-YourTable
-| where TimeGenerated >= ago(24h)
-| summarize ActivityCount = count() by bin(TimeGenerated, 1h)
-| where ActivityCount > 100  // More than usual
-```
-
-## 🛠️ Best Practices
-
-### 1. Start Simple
-- Begin with basic queries
-- Test thoroughly before adding complexity
-- Use the Dev environment for testing
-
-### 2. Use Clear Names
-- Rule names should describe what they detect
-- Include the ATT&CK technique ID
-- Use consistent naming conventions
-
-### 3. Document Your Work
-- Add comments to your KQL queries
-- Explain why you chose certain thresholds
-- Document any assumptions
-
-### 4. Test Thoroughly
-- Test with real data when possible
-- Check for false positives
-- Verify the query performance
-
-### 5. Use Parameters
-- Make thresholds configurable
-- Allow different settings per environment
-- Use parameters for values that might change
-
-## 🚨 Troubleshooting
-
-### Common Issues
-
-1. **Query Syntax Errors**
-   - Check KQL syntax in Sentinel Logs first
-   - Use the query validator in the portal
-
-2. **No Results**
-   - Verify your data source is connected
-   - Check the time range
-   - Ensure the table exists
-
-3. **Too Many False Positives**
-   - Adjust your thresholds
-   - Add more specific filters
-   - Test with historical data
-
-4. **Performance Issues**
-   - Add time filters
-   - Use efficient operators
-   - Consider query frequency
+### Too Many Alerts
+**Problem**: Rule is generating too many alerts
+**Solution**:
+- Increase your threshold (e.g., from 5 to 10 failed attempts)
+- Add more specific filters to your KQL
+- Adjust the time window
 
 ## 📚 Next Steps
 
-1. **Learn KQL**: Practice writing queries in Sentinel Logs
-2. **Study ATT&CK**: Understand the threat framework
-3. **Review Existing Rules**: Look at vendor rules for inspiration
-4. **Join the Community**: Connect with other detection engineers
+Once you've created your first rule:
 
-## 🆘 Getting Help
+1. **Learn more KQL**: Practice writing different types of queries
+2. **Explore ATT&CK**: Map your detections to specific techniques
+3. **Add entity mapping**: Extract useful entities from your alerts
+4. **Create custom details**: Add relevant fields to your alerts
+5. **Optimize performance**: Make your queries more efficient
 
-- **Documentation**: Check the `docs/` folder
-- **Team**: Ask your Detection Engineering team
-- **GitHub**: Create an issue in this repository
-- **Microsoft Docs**: [Sentinel Documentation](https://docs.microsoft.com/en-us/azure/sentinel/)
+## 🎓 Learning Resources
 
-## 🎉 Congratulations!
+- **[KQL Query Language](https://docs.microsoft.com/en-us/azure/data-explorer/kusto/query/)**
+- **[MITRE ATT&CK Framework](https://attack.mitre.org/)**
+- **[Microsoft Sentinel Documentation](https://docs.microsoft.com/en-us/azure/sentinel/)**
+- **[Bicep Templates](https://docs.microsoft.com/en-us/azure/azure-resource-manager/bicep/)**
 
-You've created your first detection rule! Remember:
-- Start simple and iterate
-- Test everything thoroughly
-- Ask for help when needed
-- Keep learning and improving
+---
 
-Happy hunting! 🕵️‍♂️
+**Congratulations! You've created your first detection rule! 🎉**
+
+Need help? Check the main README or create an issue in the repository.

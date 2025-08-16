@@ -1,144 +1,197 @@
 # Sentinel Detection Rules Infrastructure
 
-This directory contains the data-driven infrastructure for deploying Microsoft Sentinel detection rules.
+This directory contains the "building blocks" for deploying Microsoft Sentinel detection rules. Think of it as the engine that powers your detection rule deployments.
 
-## Architecture
+## 🏗️ How It Works (Simple Version)
 
-### Data-Driven Design
+Instead of creating a separate file for each detection rule (which would be messy), we use a smart approach:
 
-Instead of individual Bicep files per rule, we use a scalable approach:
+1. **One main template** (`sentinel-rules.bicep`) - This is like a "rule factory" that creates multiple rules
+2. **One reusable component** (`modules/scheduledRule.bicep`) - This is the "blueprint" for a single rule
+3. **Environment files** (`env/deploy-*.bicep`) - These tell the factory what rules to make for each environment
+4. **KQL files** (`kql/*.kql`) - These are your actual detection queries
 
-1. **Root Orchestrator** (`sentinel-rules.bicep`) - Loops through rules array
-2. **Reusable Module** (`modules/scheduledRule.bicep`) - Single rule template with defaults
-3. **Environment Wrappers** (`env/deploy-*.bicep`) - Load KQL and configure rules per environment
-4. **KQL Files** (`kql/*.kql`) - Separate query files for better review
-5. **Simple Params** (`env/params/*.jsonc`) - Just workspace names
+## 🎯 Why This Approach?
 
-### Benefits
-
-✅ **Scalable**: Add rules by adding objects to arrays, not new templates  
-✅ **DRY**: Sensible defaults in module, override only when needed  
-✅ **Readable**: KQL lives in separate files for better review  
-✅ **Maintainable**: One params file per environment, not per rule  
+✅ **Easy to add rules**: Just add one line to an array, not create new files  
 ✅ **Consistent**: All rules follow the same pattern  
+✅ **Maintainable**: Change one thing, it applies to all rules  
+✅ **Readable**: Your KQL queries are in separate files for easy review  
+✅ **Scalable**: Works whether you have 5 rules or 500 rules  
 
-## File Structure
+## 📁 What's in Each File
 
 ```
 infra/
-├── sentinel-rules.bicep          # Root orchestrator (loops through rules)
+├── sentinel-rules.bicep          # The "rule factory" - creates multiple rules
 ├── modules/
-│   └── scheduledRule.bicep       # Reusable single rule module
+│   └── scheduledRule.bicep       # The "blueprint" for one rule
 ├── README.md                     # This file
 env/
-├── deploy-dev.bicep              # Dev environment wrapper
-├── deploy-prod.bicep             # Prod environment wrapper
+├── deploy-dev.bicep              # Dev environment rules list
+├── deploy-prod.bicep             # Prod environment rules list
 ├── params/
-│   ├── dev.jsonc                 # Dev parameters (just workspace name)
-│   └── prod.jsonc                # Prod parameters (just workspace name)
+│   ├── dev.jsonc                 # Dev workspace settings
+│   └── prod.jsonc                # Prod workspace settings
 kql/
-├── uc-powershell-encoded.kql     # PowerShell encoded command detection
-├── suspicious-login-attempts.kql # Suspicious login attempts
-└── admin-account-anomaly.kql     # Admin account anomaly detection
+├── uc-powershell-encoded.kql     # PowerShell detection query
+├── suspicious-login-attempts.kql # Login attempts detection query
+└── admin-account-anomaly.kql     # Admin account detection query
 ```
 
-## Adding a New Rule
+## 🚀 Adding a New Rule (Step by Step)
 
-1. **Create KQL file** in `kql/` directory
-2. **Add rule object** to the `rules` array in `env/deploy-dev.bicep` and `env/deploy-prod.bicep`
-3. **Load KQL** using `loadTextContent('../kql/your-rule.kql')`
-4. **Configure overrides** as needed (severity, tactics, entities, etc.)
+### Step 1: Create Your KQL Query
+Create a new file in the `kql/` folder with your detection query:
 
-### Example: Adding a New Rule
+```kql
+// kql/my-new-detection.kql
+SecurityEvent
+| where EventID == 4624
+| where AccountType == "User"
+| summarize count() by Account
+| where count_ > 10
+```
+
+### Step 2: Add to Dev Environment
+Add your rule to `env/deploy-dev.bicep`:
 
 ```bicep
-// In env/deploy-dev.bicep
-var kqlNewRule = loadTextContent('../kql/new-rule.kql')
+// Load your KQL file
+var kqlNewRule = loadTextContent('../kql/my-new-detection.kql')
 
 var rules = [
   // ... existing rules ...
   {
-    name: 'uc-new-rule'
-    displayName: '[DEV] [ORG] – New Detection Rule'
-    kql: kqlNewRule
-    severity: 'Medium'
-    enabled: true
-    tactics: [ 'Execution' ]
-    techniques: [ 'T1059' ]
-    createIncident: true
-    entities: {
-      accountFullName: 'SubjectUserName'
-      hostName: 'Computer'
+    name: 'uc-my-new-detection'           // Unique identifier
+    displayName: '[DEV] [ORG] – My New Detection'  // Name in Sentinel
+    kql: kqlNewRule                       // Your KQL query
+    severity: 'Medium'                     // How serious is this?
+    enabled: true                          // Turn it on
+    frequency: 'PT1H'                      // How often to run (every hour)
+    period: 'PT1H'                         // How far back to look
+    tactics: [ 'Execution' ]               // ATT&CK tactics
+    techniques: [ 'T1059' ]                // ATT&CK techniques
+    createIncident: false                  // Don't create incidents in dev
+    grouping: {}                           // Use default grouping
+    entities: {                            // What entities to extract
+      accountFullName: 'Account'
     }
+    customDetails: {}                      // No custom details for now
   }
 ]
 ```
 
-## Module Parameters
+### Step 3: Add to Prod Environment
+Copy the same rule to `env/deploy-prod.bicep` but change:
+- `displayName`: Change `[DEV]` to `[PROD]`
+- `severity`: Maybe increase to `High`
+- `createIncident`: Set to `true`
 
-The `scheduledRule.bicep` module accepts these parameters:
+### Step 4: Test Locally
+```bash
+# Test that your files are valid
+az bicep build --file env/deploy-dev.bicep
 
-### Required
-- `name` - Stable identifier for the rule
-- `displayName` - Name shown in Sentinel portal
-- `kql` - The detection query
+# See what would be deployed
+az deployment group what-if \
+  --resource-group your-dev-rg \
+  --template-file env/deploy-dev.bicep \
+  --parameters env/params/dev.jsonc
+```
 
-### Optional (with defaults)
-- `enabled` - Enable/disable rule (default: true)
-- `severity` - Alert severity (default: 'Medium')
-- `frequency` - Query frequency (default: 'PT1H')
-- `period` - Query period (default: 'PT1H')
-- `createIncident` - Create incidents (default: true)
+## ⚙️ Rule Configuration Options
+
+### Required Settings
+- `name` - Unique identifier (no spaces, use hyphens)
+- `displayName` - What users see in Sentinel
+- `kql` - Your detection query
+
+### Optional Settings (with sensible defaults)
+- `enabled` - Turn rule on/off (default: true)
+- `severity` - How serious? (default: 'Medium')
+- `frequency` - How often to run (default: 'PT1H' = every hour)
+- `period` - How far back to look (default: 'PT1H' = last hour)
+- `createIncident` - Create incidents? (default: true)
 - `tactics` - ATT&CK tactics array (default: [])
 - `techniques` - ATT&CK techniques array (default: [])
-- `grouping` - Grouping configuration object
-- `entities` - Entity mappings object
-- `customDetails` - Custom details object
 
-## Entity Mapping
+### Advanced Settings
+- `grouping` - How to group alerts
+- `entities` - What entities to extract
+- `customDetails` - Custom fields to add to alerts
 
-The module supports these entity types:
+## 🔗 Entity Mapping
+
+Tell Sentinel what entities to extract from your alerts:
 
 ```bicep
 entities: {
-  accountFullName: 'SubjectUserName'  // Maps to Account entity
-  hostName: 'Computer'                // Maps to Host entity
-  ipAddress: 'IPAddress'              // Maps to IP entity
+  accountFullName: 'SubjectUserName'  // Extract Account entity
+  hostName: 'Computer'                // Extract Host entity  
+  ipAddress: 'IPAddress'              // Extract IP entity
 }
 ```
 
-## Custom Details
+## 📝 Custom Details
 
-Add custom fields to alerts:
+Add custom fields to your alerts:
 
 ```bicep
 customDetails: {
-  EncodedArgument: 'EncArg'           // Maps KQL column to alert field
-  CommandLine: 'CommandLine'
+  EncodedArgument: 'EncArg'           // Add custom field
+  CommandLine: 'CommandLine'          // Add another custom field
 }
 ```
 
-## Deployment
+## 🔄 Deployment
 
-The GitHub Actions workflow automatically detects changes and deploys:
+The GitHub Actions workflow automatically:
+1. **Detects changes** in your code
+2. **Validates** your Bicep files
+3. **Deploys** to Dev automatically
+4. **Waits for approval** before Prod
 
+### Manual Deployment
 ```bash
-# Manual deployment
+# Deploy to Dev
 az deployment group create \
   --resource-group sentinel-ws-dev \
   --template-file env/deploy-dev.bicep \
   --parameters env/params/dev.jsonc
 
-# What-if preview
+# Preview what would be deployed
 az deployment group what-if \
   --resource-group sentinel-ws-dev \
   --template-file env/deploy-dev.bicep \
   --parameters env/params/dev.jsonc
 ```
 
-## Environment Differences
+## 🌍 Environment Differences
 
-- **Dev**: Lower severity, no incidents, testing focus
-- **Prod**: Higher severity, create incidents, production focus
+- **Dev Environment**: 
+  - Lower severity alerts
+  - No incidents created
+  - Focus on testing and validation
 
-Rules are configured differently per environment in the wrapper files.
+- **Prod Environment**:
+  - Higher severity alerts  
+  - Incidents created
+  - Production-ready settings
+
+Rules are configured differently in each environment file to match these needs.
+
+## 🆘 Common Issues
+
+### "Property doesn't exist" Error
+Make sure all your rule objects have the same properties. If you don't need `grouping` or `customDetails`, use empty objects: `grouping: {}` and `customDetails: {}`
+
+### KQL Column Errors
+If you reference columns in `entities` or `customDetails`, make sure those columns are actually returned by your KQL query.
+
+### Validation Errors
+Run `az bicep build` locally first to catch syntax errors before deploying.
+
+---
+
+**Need help? Check the main README or create an issue! 🆘**
