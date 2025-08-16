@@ -18,7 +18,7 @@ var rules = [
     frequency: 'PT1H'
     period: 'PT1H'
     tactics: [ 'Execution', 'DefenseEvasion' ]
-    techniques: [ 'T1059.001' ]
+    techniques: [ 'T1059' ]
     createIncident: true
     grouping: {
       enabled: true

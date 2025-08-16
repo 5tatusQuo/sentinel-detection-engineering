@@ -12,7 +12,7 @@ param frequency string = 'PT1H'
 param period string = 'PT1H'
 param createIncident bool = true
 
-// ATT&CK
+// ATT&CK (NOTE: techniques must be T#### at this API level)
 param tactics array = []
 param techniques array = []
 
@@ -21,29 +21,28 @@ param grouping object = {}
 param entities object = {}
 param customDetails object = {}
 
-// --- Merge caller-provided objects with safe defaults ---
+// Merge caller objects with defaults
 var groupingDefaults = {
   enabled: true
   matchingMethod: 'AllEntities'   // or 'Selected'
+  // the following are only valid for 'Selected' on many API versions
   lookbackDuration: 'PT2H'
   reopenClosedIncident: false
   groupByEntities: []
   groupByAlertDetails: []
   groupByCustomDetails: []
 }
-var groupingEffective = union(groupingDefaults, grouping)
+var g = union(groupingDefaults, grouping)
 
 var entitiesDefaults = {
   accountFullName: null
   hostName: null
   ipAddress: null
 }
-var entitiesEffective = union(entitiesDefaults, entities)
+var e = union(entitiesDefaults, entities)
 
-var customDetailsDefaults = {}
-var customDetailsEffective = union(customDetailsDefaults, customDetails)
+var cd = customDetails // no defaults needed
 
-// Stable ruleId
 var ruleId = guid(deployment().name, name)
 
 // Reference the workspace for scoping
@@ -75,35 +74,40 @@ resource rule 'Microsoft.SecurityInsights/alertRules@2025-06-01' = {
 
     incidentConfiguration: {
       createIncident: createIncident
-      groupingConfiguration: {
-        enabled: groupingEffective.enabled
-        matchingMethod: groupingEffective.matchingMethod
-        lookbackDuration: groupingEffective.lookbackDuration
-        reopenClosedIncident: groupingEffective.reopenClosedIncident
-        groupByEntities: groupingEffective.groupByEntities
-        groupByAlertDetails: groupingEffective.groupByAlertDetails
-        groupByCustomDetails: groupingEffective.groupByCustomDetails
-      }
+      groupingConfiguration: g.matchingMethod == 'Selected'
+        ? {
+            enabled: g.enabled
+            matchingMethod: 'Selected'
+            lookbackDuration: g.lookbackDuration
+            reopenClosedIncident: g.reopenClosedIncident
+            groupByEntities: g.groupByEntities
+            groupByAlertDetails: g.groupByAlertDetails
+            groupByCustomDetails: g.groupByCustomDetails
+          }
+        : {
+            enabled: g.enabled
+            matchingMethod: 'AllEntities'
+          }
     }
 
-    // Entities (omit null mappings)
+    // Entities: only include non-null mappings
     entityMappings: length(entities) > 0 ? flatten([
-      entitiesEffective.accountFullName != null ? [{
+      e.accountFullName != null ? [{
         entityType: 'Account'
         fieldMappings: [
-          { identifier: 'FullName', columnName: string(entitiesEffective.accountFullName) }
+          { identifier: 'FullName', columnName: string(e.accountFullName) }
         ]
       }] : []
-      entitiesEffective.hostName != null ? [{
+      e.hostName != null ? [{
         entityType: 'Host'
         fieldMappings: [
-          { identifier: 'HostName', columnName: string(entitiesEffective.hostName) }
+          { identifier: 'HostName', columnName: string(e.hostName) }
         ]
       }] : []
-      entitiesEffective.ipAddress != null ? [{
+      e.ipAddress != null ? [{
         entityType: 'IP'
         fieldMappings: [
-          { identifier: 'Address', columnName: string(entitiesEffective.ipAddress) }
+          { identifier: 'Address', columnName: string(e.ipAddress) }
         ]
       }] : []
     ]) : []
@@ -112,8 +116,7 @@ resource rule 'Microsoft.SecurityInsights/alertRules@2025-06-01' = {
       alertDisplayNameFormat: displayName
     }
 
-    // Custom details must match columns from the query output
-    customDetails: customDetailsEffective
+    customDetails: cd
   }
 }
 
