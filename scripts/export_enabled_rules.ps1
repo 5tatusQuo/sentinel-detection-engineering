@@ -53,13 +53,18 @@ if (-not $Workspace) {
 
 Write-Host "Exporting enabled rules from workspace: $Workspace" -ForegroundColor Green
 
-# Get access token
+# Get access token using Azure CLI
 try {
-    $token = (Get-AzAccessToken -ResourceUrl "https://management.azure.com").Token
+    $tokenResponse = az account get-access-token --resource "https://management.azure.com" | ConvertFrom-Json
+    if (-not $tokenResponse -or -not $tokenResponse.accessToken) {
+        throw "Failed to get access token from Azure CLI"
+    }
+    $token = $tokenResponse.accessToken
     Write-Host "Successfully obtained access token" -ForegroundColor Green
 }
 catch {
     Write-Error "Failed to obtain access token: $_"
+    Write-Host "Make sure you are logged in to Azure CLI with: az login" -ForegroundColor Yellow
     exit 1
 }
 

@@ -82,6 +82,7 @@ jobs:
         fi
     
     - name: Create branch and commit
+      id: create-branch
       if: steps.check-changes.outputs.changes == 'true'
       run: |
         # Create branch name with date
