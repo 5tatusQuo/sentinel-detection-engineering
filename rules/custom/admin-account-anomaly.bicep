@@ -87,75 +87,7 @@ param groupByFields string = 'UserPrincipalName'
 param workspaceName string
 
 // =============================================================================
-// STEP 3: THE DETECTION QUERY
-// =============================================================================
-@description('The KQL query that detects admin account anomalies')
-param detectionQuery string = '''
-// Look for admin account activity
-SigninLogs
-| where TimeGenerated >= ago(1h)
-| where UserPrincipalName contains "admin" or UserPrincipalName contains "administrator"
-| where ResultType == "0"  // Successful logins
-| summarize 
-    LoginCount = count(),
-    LastLogin = max(TimeGenerated),
-    FirstLogin = min(TimeGenerated),
-    Applications = make_list(AppDisplayName),
-    IPAddresses = make_list(IPAddress),
-    Locations = make_list(Location)
-    by UserPrincipalName
-| where LoginCount >= ${adminLoginThreshold}
-| extend TimeSpan = LastLogin - FirstLogin
-| where TimeSpan < 30m  // Multiple logins within 30 minutes
-| project 
-    TimeGenerated = LastLogin,
-    UserPrincipalName,
-    LoginCount,
-    TimeSpan,
-    Applications,
-    IPAddresses,
-    Locations
-'''
-
-// =============================================================================
-// STEP 4: ATTACK FRAMEWORK MAPPING
-// =============================================================================
-@description('Which MITRE ATT&CK tactics does this detect?')
-param attackTactics array = [
-  'Initial Access'
-  'Privilege Escalation'
-  'Persistence'
-]
-
-@description('Which specific MITRE ATT&CK techniques does this detect?')
-param attackTechniques array = [
-  'T1078'  // Valid Accounts
-  'T1068'  // Exploitation for Privilege Escalation
-]
-
-// =============================================================================
-// STEP 5: INCIDENT SETTINGS
-// =============================================================================
-@description('Should this create an incident when triggered?')
-param createIncident bool = true
-
-@description('Should we group similar alerts together?')
-param groupAlerts bool = true
-
-@description('How should we group alerts?')
-@allowed([
-  'SingleAlert'
-  'GroupByAlertDetails'
-  'GroupByCustomDetails'
-  'GroupByEntities'
-])
-param groupingMethod string = 'GroupByAlertDetails'
-
-@description('Which fields should we group by?')
-param groupByFields string = 'UserPrincipalName'
-
-// =============================================================================
-// STEP 6: THE ACTUAL RULE
+// STEP 3: THE ACTUAL RULE
 // =============================================================================
 resource sentinelRule 'Microsoft.OperationalInsights/workspaces/providers/Microsoft.SecurityInsights/alertRules@2025-06-01' = {
   name: '${workspaceName}/Microsoft.SecurityInsights/${guid(resourceGroup().id, ruleDisplayName)}'
@@ -225,7 +157,7 @@ resource sentinelRule 'Microsoft.OperationalInsights/workspaces/providers/Micros
 }
 
 // =============================================================================
-// STEP 7: OUTPUTS
+// STEP 4: OUTPUTS
 // =============================================================================
 output ruleName string = sentinelRule.name
 output ruleDisplayName string = sentinelRule.properties.displayName
