@@ -69,12 +69,12 @@ az ad sp create-for-rbac \
   --role contributor \
   --scopes /subscriptions/YOUR_SUBSCRIPTION_ID
 
-# Example output:
+# Example output (your values will be different):
 # {
-#   "appId": "8f1597dc-193c-4140-8e37-300267ae2a2c",
+#   "appId": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
 #   "displayName": "GitHubActions-SentinelDetection",
-#   "password": "8pB8Q~rUvBFRLO33N.4.9OweMWGInTkzdV1zTbRh",
-#   "tenant": "8ce4f53f-7e15-4085-bf21-8382a294003f"
+#   "password": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+#   "tenant": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
 # }
 ```
 
