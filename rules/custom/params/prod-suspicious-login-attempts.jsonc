@@ -42,9 +42,6 @@
     },
     "groupingMethod": {
       "value": "AllEntities"
-    },
-    "groupByFields": {
-      "value": "IPAddress"
     }
   }
 }

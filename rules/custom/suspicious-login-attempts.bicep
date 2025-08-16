@@ -64,8 +64,7 @@ param groupAlerts bool = true
 param groupingMethod string = 'AllEntities'
 
 // Fields to group by (comma-separated)
-@description('Fields to group by (comma-separated)')
-param groupByFields string = 'IPAddress'
+
 
 // =============================================================================
 // STEP 2: EXISTING RESOURCES
@@ -109,7 +108,7 @@ resource sentinelRule 'Microsoft.SecurityInsights/alertRules@2025-06-01' = {
         enabled: groupAlerts
         lookbackDuration: 'PT5M'
         matchingMethod: groupingMethod
-        groupByEntities: groupByFields != '' ? split(groupByFields, ',') : []
+        groupByEntities: ['IP']
         reopenClosedIncident: false
       }
     }

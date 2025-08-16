@@ -43,9 +43,6 @@
     },
     "groupingMethod": {
       "value": "AllEntities"
-    },
-    "groupByFields": {
-      "value": "UserPrincipalName"
     }
   }
 }

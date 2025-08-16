@@ -42,9 +42,6 @@
     },
     "groupingMethod": {
       "value": "GroupByAlertDetails"
-    },
-    "groupByFields": {
-      "value": "Computer,SubjectUserName"
     }
   }
 }

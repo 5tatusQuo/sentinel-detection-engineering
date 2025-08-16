@@ -72,8 +72,7 @@ param groupAlerts bool = true
 ])
 param groupingMethod string = 'GroupByAlertDetails'
 
-@description('Fields to group by (comma-separated)')
-param groupByFields string = 'Computer,SubjectUserName'
+
 
 // Reference the existing Log Analytics workspace
 resource la 'Microsoft.OperationalInsights/workspaces@2022-10-01' existing = {
@@ -104,7 +103,7 @@ resource sentinelRule 'Microsoft.SecurityInsights/alertRules@2025-06-01' = {
         enabled: groupAlerts
         lookbackDuration: 'PT5M'
         matchingMethod: groupingMethod
-        groupByEntities: groupByFields != '' ? split(groupByFields, ',') : []
+        groupByEntities: ['Account', 'Host']
         reopenClosedIncident: false
       }
     }

@@ -72,8 +72,7 @@ param groupAlerts bool = true
 @allowed(['AllEntities', 'Custom', 'None'])
 param groupingMethod string = 'AllEntities'
 
-@description('Fields to group by (comma-separated)')
-param groupByFields string = 'UserPrincipalName'
+
 
 // =============================================================================
 // STEP 2: EXISTING RESOURCES
@@ -117,7 +116,7 @@ resource sentinelRule 'Microsoft.SecurityInsights/alertRules@2025-06-01' = {
         enabled: groupAlerts
         lookbackDuration: 'PT10M'
         matchingMethod: groupingMethod
-        groupByEntities: groupByFields != '' ? split(groupByFields, ',') : []
+        groupByEntities: ['Account']
         reopenClosedIncident: false
       }
     }
