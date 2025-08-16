@@ -95,14 +95,14 @@ jobs:
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
         base: main
-        branch: "chore/export-enabled-rules-$(date +%Y-%m-%d)"
-        title: "chore: export enabled Sentinel rules $(date +%Y-%m-%d)"
+        branch: "chore/export-enabled-rules"
+        title: "chore: export enabled Sentinel rules"
         body: |
           ## Automated Vendor Rule Export
           
           This PR contains the latest export of enabled detection rules from Microsoft Sentinel workspaces.
           
-          **Generated:** $(date -u +%Y-%m-%d\ %H:%M:%S\ UTC)
+          **Generated:** ${{ github.event.head_commit.timestamp || 'Manual trigger' }}
           
           ### Changes
           - Updated vendor rule snapshots in `rules/vendor/enabled/`
@@ -118,7 +118,7 @@ jobs:
           automation
           vendor-sync
         delete-branch: false
-        commit-message: "chore: export enabled Sentinel rules $(date +%Y-%m-%d)"
+        commit-message: "chore: export enabled Sentinel rules"
     
     - name: Comment on no changes
       if: steps.check-changes.outputs.changes == 'false'
