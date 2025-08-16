@@ -1,8 +1,10 @@
-param name string                 // a stable string; we derive the resource name from it
+// Required
+param name string
 param displayName string
 param kql string
-param workspaceName string        // workspace name for scoping
+param workspaceName string
 
+// Optional with defaults
 @allowed(['Critical','High','Medium','Low','Informational'])
 param severity string = 'Medium'
 param enabled bool = true
@@ -10,27 +12,38 @@ param frequency string = 'PT1H'
 param period string = 'PT1H'
 param createIncident bool = true
 
-@description('ATT&CK')
+// ATT&CK
 param tactics array = []
 param techniques array = []
 
-@description('Grouping settings (optional)')
-param grouping object = {
+// Advanced (partial objects allowed)
+param grouping object = {}
+param entities object = {}
+param customDetails object = {}
+
+// --- Merge caller-provided objects with safe defaults ---
+var groupingDefaults = {
   enabled: true
   matchingMethod: 'AllEntities'   // or 'Selected'
   lookbackDuration: 'PT2H'
   reopenClosedIncident: false
-  groupByEntities: []             // used if matchingMethod = Selected
+  groupByEntities: []
   groupByAlertDetails: []
   groupByCustomDetails: []
 }
+var groupingEffective = union(groupingDefaults, grouping)
 
-@description('Entity mappings (optional). Example: { accountFullName: "SubjectUserName", hostName: "Computer" }')
-param entities object = {}
+var entitiesDefaults = {
+  accountFullName: null
+  hostName: null
+  ipAddress: null
+}
+var entitiesEffective = union(entitiesDefaults, entities)
 
-@description('Alert custom details (optional). Example: { EncodedArgument: "EncArg", CommandLine: "CommandLine" }')
-param customDetails object = {}
+var customDetailsDefaults = {}
+var customDetailsEffective = union(customDetailsDefaults, customDetails)
 
+// Stable ruleId
 var ruleId = guid(deployment().name, name)
 
 // Reference the workspace for scoping
@@ -47,52 +60,60 @@ resource rule 'Microsoft.SecurityInsights/alertRules@2025-06-01' = {
     description: 'Scheduled analytics rule deployed via Bicep.'
     enabled: enabled
     severity: severity
+
     query: kql
     queryFrequency: frequency
     queryPeriod: period
     triggerOperator: 'GreaterThan'
     triggerThreshold: 0
+
     tactics: tactics
     techniques: techniques
+
     suppressionEnabled: false
     suppressionDuration: 'PT5M'
+
     incidentConfiguration: {
       createIncident: createIncident
       groupingConfiguration: {
-        enabled: grouping.enabled
-        reopenClosedIncident: grouping.reopenClosedIncident
-        lookbackDuration: grouping.lookbackDuration
-        matchingMethod: grouping.matchingMethod
-        groupByEntities: grouping.groupByEntities
-        groupByAlertDetails: grouping.groupByAlertDetails
-        groupByCustomDetails: grouping.groupByCustomDetails
+        enabled: groupingEffective.enabled
+        matchingMethod: groupingEffective.matchingMethod
+        lookbackDuration: groupingEffective.lookbackDuration
+        reopenClosedIncident: groupingEffective.reopenClosedIncident
+        groupByEntities: groupingEffective.groupByEntities
+        groupByAlertDetails: groupingEffective.groupByAlertDetails
+        groupByCustomDetails: groupingEffective.groupByCustomDetails
       }
     }
-    // Map only if provided
+
+    // Entities (omit null mappings)
     entityMappings: length(entities) > 0 ? flatten([
-      entities.accountFullName != null ? [{
+      entitiesEffective.accountFullName != null ? [{
         entityType: 'Account'
         fieldMappings: [
-          { identifier: 'FullName', columnName: string(entities.accountFullName) }
+          { identifier: 'FullName', columnName: string(entitiesEffective.accountFullName) }
         ]
       }] : []
-      entities.hostName != null ? [{
+      entitiesEffective.hostName != null ? [{
         entityType: 'Host'
         fieldMappings: [
-          { identifier: 'HostName', columnName: string(entities.hostName) }
+          { identifier: 'HostName', columnName: string(entitiesEffective.hostName) }
         ]
       }] : []
-      entities.ipAddress != null ? [{
+      entitiesEffective.ipAddress != null ? [{
         entityType: 'IP'
         fieldMappings: [
-          { identifier: 'Address', columnName: string(entities.ipAddress) }
+          { identifier: 'Address', columnName: string(entitiesEffective.ipAddress) }
         ]
       }] : []
     ]) : []
+
     alertDetailsOverride: {
       alertDisplayNameFormat: displayName
     }
-    customDetails: customDetails
+
+    // Custom details must match columns from the query output
+    customDetails: customDetailsEffective
   }
 }
 
