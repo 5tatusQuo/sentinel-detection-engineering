@@ -68,14 +68,6 @@ az ad sp create-for-rbac \
   --name "GitHubActions-SentinelDetection" \
   --role contributor \
   --scopes /subscriptions/YOUR_SUBSCRIPTION_ID
-
-# Example output (your values will be different):
-# {
-#   "appId": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
-#   "displayName": "GitHubActions-SentinelDetection",
-#   "password": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-#   "tenant": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-# }
 ```
 
 ##### Step 2: Get Service Principal Object ID
