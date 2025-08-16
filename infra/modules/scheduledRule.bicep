@@ -25,97 +25,42 @@ param customDetails object = {}
 var groupingDefaults = {
   enabled: true
   matchingMethod: 'AllEntities'   // or 'Selected'
-  // the following are only valid for 'Selected' on many API versions
-  lookbackDuration: 'PT2H'
-  reopenClosedIncident: false
-  groupByEntities: []
-  groupByAlertDetails: []
-  groupByCustomDetails: []
-}
-var g = union(groupingDefaults, grouping)
+@description('Rule name (unique within workspace)')
+param name string
 
-var entitiesDefaults = {
-  accountFullName: null
-  hostName: null
-  ipAddress: null
-}
-var e = union(entitiesDefaults, entities)
+@description('Display name of the rule')
+param displayName string
 
-var cd = customDetails // no defaults needed
+@description('KQL query that defines detection logic')
+param kql string
 
-var ruleId = guid(deployment().name, name)
+@allowed([ 'Low' 'Medium' 'High' 'Informational' ])
+param severity string
 
-// Reference the workspace for scoping
-resource la 'Microsoft.OperationalInsights/workspaces@2022-10-01' existing = {
-  name: workspaceName
-}
+@description('Enable or disable the rule')
+param enabled bool = true
 
-resource rule 'Microsoft.SecurityInsights/alertRules@2025-06-01' = {
-  scope: la
-  name: ruleId
-  kind: 'Scheduled'
-  properties: {
-    displayName: displayName
-    description: 'Scheduled analytics rule deployed via Bicep.'
-    enabled: enabled
-    severity: severity
+@description('Query frequency (ISO8601 duration, e.g. PT1H)')
+param frequency string
 
-    query: kql
-    queryFrequency: frequency
-    queryPeriod: period
-    triggerOperator: 'GreaterThan'
-    triggerThreshold: 0
+@description('Query lookback period (ISO8601 duration)')
+param period string
 
-    tactics: tactics
-    techniques: techniques
+@description('MITRE ATT&CK tactics')
+param tactics array
 
-    suppressionEnabled: false
-    suppressionDuration: 'PT5M'
+@description('MITRE ATT&CK techniques (only top-level T#### supported)')
+param techniques array
 
-    incidentConfiguration: {
-      createIncident: createIncident
-      groupingConfiguration: {
-        enabled: g.enabled
-        matchingMethod: g.matchingMethod
-        lookbackDuration: g.lookbackDuration
-        reopenClosedIncident: g.reopenClosedIncident
-        groupByEntities: g.groupByEntities
-        groupByAlertDetails: g.groupByAlertDetails
-        groupByCustomDetails: g.groupByCustomDetails
-      }
-    }
+@description('Whether to create incidents')
+param createIncident bool = true
 
-    // Entities: only include non-null mappings
-    entityMappings: length(entities) > 0 ? flatten([
-      e.accountFullName != null ? [{
-        entityType: 'Account'
-        fieldMappings: [
-          { identifier: 'FullName', columnName: string(e.accountFullName) }
-        ]
-      }] : []
-      e.hostName != null ? [{
-        entityType: 'Host'
-        fieldMappings: [
-          { identifier: 'HostName', columnName: string(e.hostName) }
-        ]
-      }] : []
-      e.ipAddress != null ? [{
-        entityType: 'IP'
-        fieldMappings: [
-          { identifier: 'Address', columnName: string(e.ipAddress) }
-        ]
-      }] : []
-    ]) : []
+// ----- optional -----
+@description('Custom grouping settings')
+param grouping object = {}
 
-    alertDetailsOverride: {
-      alertDisplayNameFormat: displayName
-    }
+@description('Entity mappings')
+param entities array = []
 
-    customDetails: cd
-  }
-}
-
-// Outputs for monitoring
-output ruleName string = rule.name
-output ruleDisplayName string = rule.properties.displayName
-output ruleEnabled bool = rule.properties.enabled
+@description('Custom details (key-value mapping)')
+param customDetails object = {}
