@@ -64,8 +64,8 @@ param groupingMethod string = 'GroupByAlertDetails'
 param groupByFields string = 'Computer,SubjectUserName'
 
 resource sentinelRule 'Microsoft.SecurityInsights/alertRules@2025-06-01' = {
+  parent: resourceGroup()
   name: guid(resourceGroup().id, ruleName)
-  location: resourceGroup().location
   kind: 'Scheduled'
   properties: {
     displayName: ruleName

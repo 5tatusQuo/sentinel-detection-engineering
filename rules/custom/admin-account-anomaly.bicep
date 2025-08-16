@@ -115,8 +115,8 @@ param groupByFields string = 'UserPrincipalName'
 // STEP 6: THE ACTUAL RULE
 // =============================================================================
 resource sentinelRule 'Microsoft.SecurityInsights/alertRules@2025-06-01' = {
+  parent: resourceGroup()
   name: guid(resourceGroup().id, ruleDisplayName)
-  location: resourceGroup().location
   kind: 'Scheduled'
   
   properties: {
