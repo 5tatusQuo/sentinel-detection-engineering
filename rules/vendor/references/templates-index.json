@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Vendor Templates Index",
+  "description": "Index of vendor detection rule templates and metadata",
+  "version": "1.0.0",
+  "lastUpdated": "2024-01-01T00:00:00Z",
+  "templates": [
+    {
+      "id": "microsoft-sentinel-powershell-encoded",
+      "name": "Suspicious PowerShell (EncodedCommand)",
+      "vendor": "Microsoft",
+      "category": "Execution",
+      "techniques": ["T1059.001"],
+      "tactics": ["Execution", "DefenseEvasion"],
+      "dataSources": ["SecurityEvent"],
+      "severity": "Medium",
+      "version": "1.0.0",
+      "lastUpdated": "2024-01-01T00:00:00Z",
+      "description": "Detects PowerShell commands that use encoded commands",
+      "references": [
+        "https://attack.mitre.org/techniques/T1059/001/",
+        "https://docs.microsoft.com/en-us/azure/sentinel/detect-threats-built-in"
+      ],
+      "templateFile": "templates/microsoft-sentinel-powershell-encoded.json"
+    }
+  ],
+  "categories": {
+    "Execution": {
+      "description": "Techniques that result in execution of adversary-controlled code",
+      "count": 1
+    },
+    "DefenseEvasion": {
+      "description": "Techniques that adversaries use to avoid detection",
+      "count": 1
+    }
+  },
+  "vendors": {
+    "Microsoft": {
+      "description": "Microsoft-provided detection rules",
+      "count": 1
+    }
+  }
+}

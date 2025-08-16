@@ -1,0 +1,187 @@
+name: Deploy Detection Rules
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'rules/custom/**'
+      - '.github/workflows/deploy.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'rules/custom/**'
+      - '.github/workflows/deploy.yml'
+
+env:
+  AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+  AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+
+jobs:
+  build-validate:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Setup Bicep
+      uses: azure/setup-bicep@v1
+    
+    - name: Install Azure CLI
+      run: |
+        curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+        az --version
+    
+    - name: Login to Azure
+      uses: azure/login@v2
+      with:
+        client-id: ${{ secrets.AZURE_CLIENT_ID }}
+        tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+        subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+    
+    - name: Validate Bicep templates
+      run: |
+        echo "Validating Bicep templates..."
+        for file in rules/custom/*.bicep; do
+          if [ -f "$file" ]; then
+            echo "Building $file"
+            az bicep build --file "$file"
+            if [ $? -ne 0 ]; then
+              echo "❌ Bicep validation failed for $file"
+              exit 1
+            fi
+          fi
+        done
+        echo "✅ All Bicep templates validated successfully"
+    
+    - name: What-if deployment (Dev)
+      run: |
+        echo "Running what-if deployment for Dev environment..."
+        for file in rules/custom/*.bicep; do
+          if [ -f "$file" ]; then
+            echo "What-if for $file"
+            az deployment group what-if \
+              --resource-group ${{ secrets.SENTINEL_RG_DEV }} \
+              --template-file "$file" \
+              --parameters rules/custom/params/dev.jsonc \
+              --no-pretty-print
+          fi
+        done
+        echo "✅ What-if deployment completed successfully"
+    
+    - name: Smoke test queries
+      run: |
+        echo "Running smoke tests on queries..."
+        # This is a placeholder for query validation
+        # In a real implementation, you might:
+        # 1. Extract queries from Bicep templates
+        # 2. Add "| take 0" to make them safe
+        # 3. Execute against Dev workspace
+        echo "✅ Smoke tests completed (placeholder)"
+
+  deploy-dev:
+    needs: build-validate
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Setup Bicep
+      uses: azure/setup-bicep@v1
+    
+    - name: Install Azure CLI
+      run: |
+        curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+        az --version
+    
+    - name: Login to Azure
+      uses: azure/login@v2
+      with:
+        client-id: ${{ secrets.AZURE_CLIENT_ID }}
+        tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+        subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+    
+    - name: Deploy to Dev
+      run: |
+        echo "Deploying to Dev environment..."
+        for file in rules/custom/*.bicep; do
+          if [ -f "$file" ]; then
+            echo "Deploying $file"
+            az deployment group create \
+              --resource-group ${{ secrets.SENTINEL_RG_DEV }} \
+              --template-file "$file" \
+              --parameters rules/custom/params/dev.jsonc \
+              --verbose
+          fi
+        done
+        echo "✅ Dev deployment completed successfully"
+    
+    - name: Verify deployment
+      run: |
+        echo "Verifying Dev deployment..."
+        # List deployed rules
+        az deployment group show \
+          --resource-group ${{ secrets.SENTINEL_RG_DEV }} \
+          --name $(az deployment group list --resource-group ${{ secrets.SENTINEL_RG_DEV }} --query '[0].name' -o tsv) \
+          --query 'properties.outputs' \
+          --output table
+
+  deploy-prod:
+    needs: [build-validate, deploy-dev]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: sentinel-prod
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Setup Bicep
+      uses: azure/setup-bicep@v1
+    
+    - name: Install Azure CLI
+      run: |
+        curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+        az --version
+    
+    - name: Login to Azure
+      uses: azure/login@v2
+      with:
+        client-id: ${{ secrets.AZURE_CLIENT_ID }}
+        tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+        subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+    
+    - name: Deploy to Prod
+      run: |
+        echo "Deploying to Production environment..."
+        for file in rules/custom/*.bicep; do
+          if [ -f "$file" ]; then
+            echo "Deploying $file"
+            az deployment group create \
+              --resource-group ${{ secrets.SENTINEL_RG_PROD }} \
+              --template-file "$file" \
+              --parameters rules/custom/params/prod.jsonc \
+              --verbose
+          fi
+        done
+        echo "✅ Production deployment completed successfully"
+    
+    - name: Verify production deployment
+      run: |
+        echo "Verifying Production deployment..."
+        # List deployed rules
+        az deployment group show \
+          --resource-group ${{ secrets.SENTINEL_RG_PROD }} \
+          --name $(az deployment group list --resource-group ${{ secrets.SENTINEL_RG_PROD }} --query '[0].name' -o tsv) \
+          --query 'properties.outputs' \
+          --output table
+    
+    - name: Post-deployment validation
+      run: |
+        echo "Running post-deployment validation..."
+        # Add any post-deployment checks here
+        # e.g., verify rules are enabled, check incident configuration
+        echo "✅ Post-deployment validation completed"

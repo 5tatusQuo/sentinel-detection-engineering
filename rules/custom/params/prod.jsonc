@@ -1,0 +1,43 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    // Production environment overrides
+    // Higher severity, incident creation enabled, proper grouping
+    "ruleName": {
+      "value": "[ORG] – Suspicious PowerShell (EncodedCommand)"
+    },
+    "severity": {
+      "value": "Medium"
+    },
+    "enabled": {
+      "value": true
+    },
+    "query": {
+      "value": "SecurityEvent\n| where EventID == 4104\n| where EventData contains \"EncodedCommand\"\n| where EventData contains \"powershell\"\n| extend EncodedCommand = extract(\"EncodedCommand\\\\s*=\\\\s*([^\\\\s]+)\", 1, EventData)\n| where isnotempty(EncodedCommand)\n| extend DecodedCommand = base64_decode_tostring(EncodedCommand)\n| where DecodedCommand contains \"Invoke-Expression\" or DecodedCommand contains \"IEX\"\n| project TimeGenerated, Computer, SubjectUserName, EncodedCommand, DecodedCommand"
+    },
+    "tactics": {
+      "value": [
+        "Execution",
+        "DefenseEvasion"
+      ]
+    },
+    "techniques": {
+      "value": [
+        "T1059.001"
+      ]
+    },
+    "createIncident": {
+      "value": true
+    },
+    "groupAlerts": {
+      "value": true
+    },
+    "groupingMethod": {
+      "value": "GroupByAlertDetails"
+    },
+    "groupByFields": {
+      "value": "Computer,SubjectUserName"
+    }
+  }
+}

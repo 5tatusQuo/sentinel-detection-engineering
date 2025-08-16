@@ -1,0 +1,145 @@
+name: Drift Detection
+
+on:
+  schedule:
+    # Run weekly on Sundays at 3 AM UTC
+    - cron: '0 3 * * 0'
+  workflow_dispatch:
+    inputs:
+      workspace:
+        description: 'Workspace to check for drift'
+        required: true
+        default: 'prod'
+        type: choice
+        options:
+          - dev
+          - prod
+
+env:
+  AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+  AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+
+jobs:
+  detect-drift:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Full history for branch comparison
+    
+    - name: Setup PowerShell
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '8.0.x'
+    
+    - name: Setup Bicep
+      uses: azure/setup-bicep@v1
+    
+    - name: Install Azure CLI
+      run: |
+        curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+        az --version
+    
+    - name: Login to Azure
+      uses: azure/login@v2
+      with:
+        client-id: ${{ secrets.AZURE_CLIENT_ID }}
+        tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+        subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+    
+    - name: Detect drift in Dev workspace
+      if: github.event.inputs.workspace == 'dev' || github.event_name == 'schedule'
+      env:
+        SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        RESOURCE_GROUP: ${{ secrets.SENTINEL_RG_DEV }}
+        WORKSPACE: ${{ secrets.SENTINEL_WS_DEV }}
+        API_VERSION: '2025-06-01'
+      run: |
+        pwsh -File scripts/detect_drift.ps1
+      continue-on-error: true
+    
+    - name: Detect drift in Prod workspace
+      if: github.event.inputs.workspace == 'prod' || github.event_name == 'schedule'
+      env:
+        SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        RESOURCE_GROUP: ${{ secrets.SENTINEL_RG_PROD }}
+        WORKSPACE: ${{ secrets.SENTINEL_WS_PROD }}
+        API_VERSION: '2025-06-01'
+      run: |
+        pwsh -File scripts/detect_drift.ps1
+    
+    - name: Check for drift report
+      id: check-drift
+      run: |
+        if [ -f "drift-report.md" ]; then
+          echo "drift_found=true" >> $GITHUB_OUTPUT
+          echo "Drift report found"
+        else
+          echo "drift_found=false" >> $GITHUB_OUTPUT
+          echo "No drift report found"
+        fi
+    
+    - name: Create branch and commit drift report
+      if: steps.check-drift.outputs.drift_found == 'true'
+      run: |
+        # Create branch name with date
+        BRANCH_NAME="fix/drift-detection-$(date +%Y-%m-%d)"
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git checkout -b "$BRANCH_NAME"
+        git add drift-report.md
+        git commit -m "fix: drift detection report $(date +%Y-%m-%d)"
+        echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+    
+    - name: Push branch
+      if: steps.check-drift.outputs.drift_found == 'true'
+      uses: ad-m/github-push-action@master
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        branch: ${{ steps.create-branch.outputs.branch_name }}
+    
+    - name: Create Pull Request
+      if: steps.check-drift.outputs.drift_found == 'true'
+      uses: peter-evans/create-pull-request@v5
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        branch: ${{ steps.create-branch.outputs.branch_name }}
+        title: "fix: drift detection report $(date +%Y-%m-%d)"
+        body: |
+          ## Drift Detection Alert
+          
+          ⚠️ **Configuration drift detected** between desired state (Bicep templates) and actual state (Sentinel workspace).
+          
+          **Generated:** $(date -u +%Y-%m-%d\ %H:%M:%S\ UTC)  
+          **Workspace:** ${{ github.event.inputs.workspace || 'prod' }}
+          
+          ### What is drift?
+          Drift occurs when the actual configuration in Microsoft Sentinel differs from what's defined in our Bicep templates. This can happen when:
+          - Rules are modified directly in the Azure portal
+          - Manual changes bypass the GitOps workflow
+          - Vendor rules are updated outside our control
+          
+          ### Next Steps
+          1. **Review the drift report** attached to this PR
+          2. **Investigate the differences** and determine if they're intentional
+          3. **Update Bicep templates** if the changes should be permanent
+          4. **Redeploy** to sync the workspace with desired state
+          
+          ### Prevention
+          - Always make changes through this repository
+          - Avoid direct portal modifications
+          - Use the automated deployment pipeline
+          
+          **Note:** This is an automated drift detection. Please review and take appropriate action.
+        labels: |
+          drift-detection
+          needs-attention
+        delete-branch: false
+    
+    - name: Comment on successful check
+      if: steps.check-drift.outputs.drift_found == 'false'
+      run: |
+        echo "✅ No drift detected - all rules are in sync with desired state"
