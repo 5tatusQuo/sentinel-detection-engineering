@@ -15,6 +15,9 @@ on:
           - dev
           - prod
 
+permissions:
+  id-token: write
+
 env:
   AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
   AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
