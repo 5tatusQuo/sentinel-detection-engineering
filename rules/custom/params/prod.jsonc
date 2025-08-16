@@ -70,6 +70,38 @@
     },
     "groupByFields": {
       "value": "IPAddress,AppDisplayName"
+    },
+
+    // New rule: Admin Account Anomaly Detection
+    "ruleDisplayName": {
+      "value": "[ORG] – Admin Account Anomaly Detection (T1078)"
+    },
+    "ruleSeverity": {
+      "value": "High"
+    },
+    "ruleEnabled": {
+      "value": true
+    },
+    "adminLoginThreshold": {
+      "value": 3
+    },
+    "queryFrequency": {
+      "value": "PT1H"
+    },
+    "queryPeriod": {
+      "value": "PT1H"
+    },
+    "createIncident": {
+      "value": true
+    },
+    "groupAlerts": {
+      "value": true
+    },
+    "groupingMethod": {
+      "value": "GroupByAlertDetails"
+    },
+    "groupByFields": {
+      "value": "UserPrincipalName"
     }
   }
 }

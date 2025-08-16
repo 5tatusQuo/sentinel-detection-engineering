@@ -70,6 +70,38 @@
     },
     "groupByFields": {
       "value": ""
+    },
+
+    // New rule: Admin Account Anomaly Detection
+    "ruleDisplayName": {
+      "value": "[ORG] – Admin Account Anomaly Detection (T1078) [DEV]"
+    },
+    "ruleSeverity": {
+      "value": "Medium"
+    },
+    "ruleEnabled": {
+      "value": true
+    },
+    "adminLoginThreshold": {
+      "value": 2
+    },
+    "queryFrequency": {
+      "value": "PT30M"
+    },
+    "queryPeriod": {
+      "value": "PT30M"
+    },
+    "createIncident": {
+      "value": false
+    },
+    "groupAlerts": {
+      "value": false
+    },
+    "groupingMethod": {
+      "value": "SingleAlert"
+    },
+    "groupByFields": {
+      "value": ""
     }
   }
 }
