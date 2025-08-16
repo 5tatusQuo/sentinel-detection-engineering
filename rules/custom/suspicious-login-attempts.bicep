@@ -110,9 +110,12 @@ param groupByFields string = 'IPAddress,AppDisplayName'
 // =============================================================================
 // STEP 6: THE ACTUAL RULE
 // =============================================================================
-resource sentinelRule 'Microsoft.SecurityInsights/alertRules@2025-06-01' = {
-  parent: resourceGroup()
-  name: guid(resourceGroup().id, ruleDisplayName)
+// Workspace parameter
+@description('Name of the Log Analytics workspace')
+param workspaceName string
+
+resource sentinelRule 'Microsoft.OperationalInsights/workspaces/providers/Microsoft.SecurityInsights/alertRules@2025-06-01' = {
+  name: '${workspaceName}/Microsoft.SecurityInsights/${guid(resourceGroup().id, ruleDisplayName)}'
   kind: 'Scheduled'
   
   properties: {

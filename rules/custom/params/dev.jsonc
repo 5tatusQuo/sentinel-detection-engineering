@@ -2,10 +2,9 @@
   "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
   "contentVersion": "1.0.0.0",
   "parameters": {
-    // Development environment overrides
-    // Lower severity for testing, more frequent queries for validation
+    // PowerShell Encoded Command Rule
     "ruleName": {
-      "value": "[ORG] – Suspicious PowerShell (EncodedCommand) [DEV]"
+      "value": "[DEV] [ORG] – Suspicious PowerShell (EncodedCommand)"
     },
     "severity": {
       "value": "Low"
@@ -14,7 +13,7 @@
       "value": true
     },
     "query": {
-      "value": "SecurityEvent\n| where EventID == 4104\n| where EventData contains \"EncodedCommand\"\n| where EventData contains \"powershell\"\n| extend EncodedCommand = extract(\"EncodedCommand\\\\s*=\\\\s*([^\\\\s]+)\", 1, EventData)\n| where isnotempty(EncodedCommand)\n| extend DecodedCommand = base64_decode_tostring(EncodedCommand)\n| where DecodedCommand contains \"Invoke-Expression\" or DecodedCommand contains \"IEX\"\n| project TimeGenerated, Computer, SubjectUserName, EncodedCommand, DecodedCommand\n| take 100"
+      "value": "SecurityEvent | where EventID == 4104 | where CommandLine contains \"-EncodedCommand\" | take 100"
     },
     "tactics": {
       "value": [
@@ -31,18 +30,21 @@
       "value": false
     },
     "groupAlerts": {
-      "value": false
+      "value": true
     },
     "groupingMethod": {
-      "value": "SingleAlert"
+      "value": "AllEntities"
     },
     "groupByFields": {
-      "value": ""
+      "value": "Computer,SubjectUserName"
+    },
+    "workspaceName": {
+      "value": "sentinel-workspace-dev"
     },
 
-    // New rule: Suspicious Login Attempts
+    // Suspicious Login Attempts Rule
     "ruleDisplayName": {
-      "value": "[ORG] – Suspicious Login Attempts (T1078) [DEV]"
+      "value": "[DEV] [ORG] – Suspicious Login Attempts (T1078)"
     },
     "ruleSeverity": {
       "value": "Low"
@@ -50,31 +52,45 @@
     "ruleEnabled": {
       "value": true
     },
-    "failedLoginThreshold": {
-      "value": 3
+    "detectionQuery": {
+      "value": "SigninLogs | where TimeGenerated > ago(1h) | where ResultType != 0 | summarize FailedAttempts = count() by IPAddress, AppDisplayName, bin(TimeGenerated, 5m) | where FailedAttempts >= 3 | take 100"
     },
     "queryFrequency": {
-      "value": "PT15M"
+      "value": "PT1H"
     },
     "queryPeriod": {
-      "value": "PT15M"
+      "value": "PT1H"
+    },
+    "attackTactics": {
+      "value": [
+        "InitialAccess",
+        "Persistence"
+      ]
+    },
+    "attackTechniques": {
+      "value": [
+        "T1078"
+      ]
     },
     "createIncident": {
       "value": false
     },
     "groupAlerts": {
-      "value": false
+      "value": true
     },
     "groupingMethod": {
-      "value": "SingleAlert"
+      "value": "AllEntities"
     },
     "groupByFields": {
-      "value": ""
+      "value": "IPAddress"
+    },
+    "workspaceName": {
+      "value": "sentinel-workspace-dev"
     },
 
-    // New rule: Admin Account Anomaly Detection
+    // Admin Account Anomaly Rule
     "ruleDisplayName": {
-      "value": "[ORG] – Admin Account Anomaly Detection (T1078) [DEV]"
+      "value": "[DEV] [ORG] – Admin Account Anomaly Detection (T1078)"
     },
     "ruleSeverity": {
       "value": "Medium"
@@ -82,26 +98,41 @@
     "ruleEnabled": {
       "value": true
     },
-    "adminLoginThreshold": {
-      "value": 2
+    "detectionQuery": {
+      "value": "SigninLogs | where TimeGenerated > ago(1h) | where ResultType == 0 | where UserPrincipalName has \"@\" | where AppDisplayName in~ (\"Microsoft Azure PowerShell\", \"Microsoft Azure CLI\", \"Azure Portal\") | summarize LoginCount = count(), Applications = make_set(AppDisplayName), IPAddresses = make_set(IPAddress), Locations = make_set(Location), TimeSpan = max(TimeGenerated) - min(TimeGenerated) by UserPrincipalName, bin(TimeGenerated, 5m) | where LoginCount >= 2 | where TimeSpan < 30m | take 100"
     },
     "queryFrequency": {
-      "value": "PT30M"
+      "value": "PT1H"
     },
     "queryPeriod": {
-      "value": "PT30M"
+      "value": "PT1H"
+    },
+    "attackTactics": {
+      "value": [
+        "Persistence",
+        "PrivilegeEscalation",
+        "DefenseEvasion"
+      ]
+    },
+    "attackTechniques": {
+      "value": [
+        "T1078"
+      ]
     },
     "createIncident": {
       "value": false
     },
     "groupAlerts": {
-      "value": false
+      "value": true
     },
     "groupingMethod": {
-      "value": "SingleAlert"
+      "value": "AllEntities"
     },
     "groupByFields": {
-      "value": ""
+      "value": "UserPrincipalName"
+    },
+    "workspaceName": {
+      "value": "sentinel-workspace-dev"
     }
   }
 }

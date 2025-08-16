@@ -16,32 +16,75 @@ var ruleMetadata = {
 }
 
 // =============================================================================
-// STEP 2: PARAMETERS
+// STEP 2: PARAMETERS (What can be customized)
 // =============================================================================
-@description('The name that will appear in the Sentinel portal')
+
+// Basic rule settings
+@description('Display name for the detection rule')
 param ruleDisplayName string = '[ORG] – Admin Account Anomaly Detection (T1078)'
 
-@description('How serious is this threat?')
-@allowed([
-  'Critical'
-  'High'
-  'Medium'
-  'Low'
-  'Informational'
-])
-param ruleSeverity string = 'High'
-
-@description('Should this rule be turned on?')
+@description('Whether the rule is enabled')
 param ruleEnabled bool = true
 
-@description('How many admin logins before we alert?')
-param adminLoginThreshold int = 3
+@description('Severity level of the alert')
+@allowed(['Low', 'Medium', 'High', 'Critical'])
+param ruleSeverity string = 'Medium'
 
-@description('How often should we check?')
+// Detection query settings
+@description('KQL query for detection logic')
+param detectionQuery string = '''
+SigninLogs
+| where TimeGenerated > ago(1h)
+| where ResultType == 0  // Successful logins
+| where UserPrincipalName has "@"  // Only cloud accounts
+| where AppDisplayName in~ ("Microsoft Azure PowerShell", "Microsoft Azure CLI", "Azure Portal")
+| summarize LoginCount = count(), 
+          Applications = make_set(AppDisplayName),
+          IPAddresses = make_set(IPAddress),
+          Locations = make_set(Location),
+          TimeSpan = max(TimeGenerated) - min(TimeGenerated)
+    by UserPrincipalName, bin(TimeGenerated, 5m)
+| where LoginCount >= 3  // Multiple logins in short time
+| where TimeSpan < 30m   // Within 30 minutes
+| project TimeGenerated, UserPrincipalName, LoginCount, Applications, IPAddresses, Locations, TimeSpan
+'''
+
+@description('How often to run the query')
 param queryFrequency string = 'PT1H'
 
-@description('How far back should we look?')
+@description('Time window for the query')
 param queryPeriod string = 'PT1H'
+
+// ATT&CK mapping
+@description('MITRE ATT&CK tactics')
+param attackTactics array = [
+  'Persistence'
+  'PrivilegeEscalation'
+  'DefenseEvasion'
+]
+
+@description('MITRE ATT&CK techniques')
+param attackTechniques array = [
+  'T1078'  // Valid Accounts
+]
+
+// Incident configuration
+@description('Whether to create incidents from alerts')
+param createIncident bool = true
+
+@description('Whether to group related alerts')
+param groupAlerts bool = true
+
+@description('How to group alerts')
+@allowed(['AllEntities', 'Custom', 'None'])
+param groupingMethod string = 'AllEntities'
+
+@description('Fields to group by (comma-separated)')
+param groupByFields string = 'UserPrincipalName'
+
+// Workspace parameter
+@description('Name of the Log Analytics workspace')
+param workspaceName string
 
 // =============================================================================
 // STEP 3: THE DETECTION QUERY
@@ -114,9 +157,8 @@ param groupByFields string = 'UserPrincipalName'
 // =============================================================================
 // STEP 6: THE ACTUAL RULE
 // =============================================================================
-resource sentinelRule 'Microsoft.SecurityInsights/alertRules@2025-06-01' = {
-  parent: resourceGroup()
-  name: guid(resourceGroup().id, ruleDisplayName)
+resource sentinelRule 'Microsoft.OperationalInsights/workspaces/providers/Microsoft.SecurityInsights/alertRules@2025-06-01' = {
+  name: '${workspaceName}/Microsoft.SecurityInsights/${guid(resourceGroup().id, ruleDisplayName)}'
   kind: 'Scheduled'
   
   properties: {

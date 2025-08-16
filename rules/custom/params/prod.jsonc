@@ -2,8 +2,7 @@
   "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
   "contentVersion": "1.0.0.0",
   "parameters": {
-    // Production environment overrides
-    // Higher severity, incident creation enabled, proper grouping
+    // PowerShell Encoded Command Rule
     "ruleName": {
       "value": "[ORG] – Suspicious PowerShell (EncodedCommand)"
     },
@@ -14,7 +13,7 @@
       "value": true
     },
     "query": {
-      "value": "SecurityEvent\n| where EventID == 4104\n| where EventData contains \"EncodedCommand\"\n| where EventData contains \"powershell\"\n| extend EncodedCommand = extract(\"EncodedCommand\\\\s*=\\\\s*([^\\\\s]+)\", 1, EventData)\n| where isnotempty(EncodedCommand)\n| extend DecodedCommand = base64_decode_tostring(EncodedCommand)\n| where DecodedCommand contains \"Invoke-Expression\" or DecodedCommand contains \"IEX\"\n| project TimeGenerated, Computer, SubjectUserName, EncodedCommand, DecodedCommand"
+      "value": "SecurityEvent | where EventID == 4104 | where CommandLine contains \"-EncodedCommand\""
     },
     "tactics": {
       "value": [
@@ -34,13 +33,16 @@
       "value": true
     },
     "groupingMethod": {
-      "value": "GroupByAlertDetails"
+      "value": "AllEntities"
     },
     "groupByFields": {
       "value": "Computer,SubjectUserName"
     },
+    "workspaceName": {
+      "value": "sentinel-workspace-prod"
+    },
 
-    // New rule: Suspicious Login Attempts
+    // Suspicious Login Attempts Rule
     "ruleDisplayName": {
       "value": "[ORG] – Suspicious Login Attempts (T1078)"
     },
@@ -50,14 +52,25 @@
     "ruleEnabled": {
       "value": true
     },
-    "failedLoginThreshold": {
-      "value": 5
+    "detectionQuery": {
+      "value": "SigninLogs | where TimeGenerated > ago(1h) | where ResultType != 0 | summarize FailedAttempts = count() by IPAddress, AppDisplayName, bin(TimeGenerated, 5m) | where FailedAttempts >= 5"
     },
     "queryFrequency": {
       "value": "PT1H"
     },
     "queryPeriod": {
       "value": "PT1H"
+    },
+    "attackTactics": {
+      "value": [
+        "InitialAccess",
+        "Persistence"
+      ]
+    },
+    "attackTechniques": {
+      "value": [
+        "T1078"
+      ]
     },
     "createIncident": {
       "value": true
@@ -66,13 +79,16 @@
       "value": true
     },
     "groupingMethod": {
-      "value": "GroupByAlertDetails"
+      "value": "AllEntities"
     },
     "groupByFields": {
-      "value": "IPAddress,AppDisplayName"
+      "value": "IPAddress"
+    },
+    "workspaceName": {
+      "value": "sentinel-workspace-prod"
     },
 
-    // New rule: Admin Account Anomaly Detection
+    // Admin Account Anomaly Rule
     "ruleDisplayName": {
       "value": "[ORG] – Admin Account Anomaly Detection (T1078)"
     },
@@ -82,14 +98,26 @@
     "ruleEnabled": {
       "value": true
     },
-    "adminLoginThreshold": {
-      "value": 3
+    "detectionQuery": {
+      "value": "SigninLogs | where TimeGenerated > ago(1h) | where ResultType == 0 | where UserPrincipalName has \"@\" | where AppDisplayName in~ (\"Microsoft Azure PowerShell\", \"Microsoft Azure CLI\", \"Azure Portal\") | summarize LoginCount = count(), Applications = make_set(AppDisplayName), IPAddresses = make_set(IPAddress), Locations = make_set(Location), TimeSpan = max(TimeGenerated) - min(TimeGenerated) by UserPrincipalName, bin(TimeGenerated, 5m) | where LoginCount >= 3 | where TimeSpan < 30m"
     },
     "queryFrequency": {
       "value": "PT1H"
     },
     "queryPeriod": {
       "value": "PT1H"
+    },
+    "attackTactics": {
+      "value": [
+        "Persistence",
+        "PrivilegeEscalation",
+        "DefenseEvasion"
+      ]
+    },
+    "attackTechniques": {
+      "value": [
+        "T1078"
+      ]
     },
     "createIncident": {
       "value": true
@@ -98,10 +126,13 @@
       "value": true
     },
     "groupingMethod": {
-      "value": "GroupByAlertDetails"
+      "value": "AllEntities"
     },
     "groupByFields": {
       "value": "UserPrincipalName"
+    },
+    "workspaceName": {
+      "value": "sentinel-workspace-prod"
     }
   }
 }

@@ -63,9 +63,11 @@ param groupingMethod string = 'GroupByAlertDetails'
 @description('Group by fields (comma-separated)')
 param groupByFields string = 'Computer,SubjectUserName'
 
-resource sentinelRule 'Microsoft.SecurityInsights/alertRules@2025-06-01' = {
-  parent: resourceGroup()
-  name: guid(resourceGroup().id, ruleName)
+@description('Name of the Log Analytics workspace')
+param workspaceName string
+
+resource sentinelRule 'Microsoft.OperationalInsights/workspaces/providers/Microsoft.SecurityInsights/alertRules@2025-06-01' = {
+  name: '${workspaceName}/Microsoft.SecurityInsights/${guid(resourceGroup().id, ruleName)}'
   kind: 'Scheduled'
   properties: {
     displayName: ruleName
