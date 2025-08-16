@@ -66,8 +66,9 @@ param groupByFields string = 'Computer,SubjectUserName'
 @description('Name of the Log Analytics workspace')
 param workspaceName string
 
-resource sentinelRule 'Microsoft.OperationalInsights/workspaces/providers/Microsoft.SecurityInsights/alertRules@2025-06-01' = {
-  name: '${workspaceName}/Microsoft.SecurityInsights/${guid(resourceGroup().id, ruleName)}'
+resource sentinelRule 'Microsoft.SecurityInsights/alertRules@2025-06-01' = {
+  name: guid(resourceGroup().id, ruleName)
+  location: resourceGroup().location
   kind: 'Scheduled'
   properties: {
     displayName: ruleName

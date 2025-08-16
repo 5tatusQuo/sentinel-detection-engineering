@@ -89,8 +89,9 @@ param workspaceName string
 // =============================================================================
 // STEP 3: THE ACTUAL RULE
 // =============================================================================
-resource sentinelRule 'Microsoft.OperationalInsights/workspaces/providers/Microsoft.SecurityInsights/alertRules@2025-06-01' = {
-  name: '${workspaceName}/Microsoft.SecurityInsights/${guid(resourceGroup().id, ruleDisplayName)}'
+resource sentinelRule 'Microsoft.SecurityInsights/alertRules@2025-06-01' = {
+  name: guid(resourceGroup().id, ruleDisplayName)
+  location: resourceGroup().location
   kind: 'Scheduled'
   
   properties: {
