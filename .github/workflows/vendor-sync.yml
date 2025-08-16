@@ -113,7 +113,7 @@ jobs:
           - [ ] Check for rule modifications
           - [ ] Verify rule configurations
           
-          **Note:** This is an automated export. Manual changes should be made to custom rules in `rules/custom/`.
+          **Note:** This is an automated export. Manual changes should be made to custom rules in `env/deploy-*.bicep` files.
         delete-branch: false
         commit-message: "chore: export enabled Sentinel rules"
     

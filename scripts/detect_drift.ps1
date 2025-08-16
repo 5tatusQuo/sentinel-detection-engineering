@@ -95,7 +95,7 @@ Write-Host "Found $($allRules.Count) rules in workspace" -ForegroundColor Green
 
 # Build desired state from Bicep templates
 $desiredRules = @{}
-$bicepFiles = Get-ChildItem -Path "rules/custom" -Filter "*.bicep" -Recurse
+$bicepFiles = Get-ChildItem -Path "env" -Filter "deploy-*.bicep" -Recurse
 
 Write-Host "Processing $($bicepFiles.Count) Bicep templates" -ForegroundColor Yellow
 

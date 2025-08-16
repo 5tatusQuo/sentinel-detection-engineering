@@ -6,7 +6,8 @@ This repository contains Microsoft Sentinel detection rules and deployment autom
 
 This repository manages Microsoft Sentinel detection rules using Infrastructure as Code (IaC) with Bicep templates. It provides:
 
-- **Custom Detection Rules**: Authoritative Bicep templates in `rules/custom/`
+- **Custom Detection Rules**: Data-driven Bicep templates in `env/` and `infra/`
+- **KQL Queries**: Detection queries in `kql/`
 - **Vendor Rule Management**: Automated export and tracking of vendor rules
 - **Automated Deployment**: Dev → Approval → Prod pipeline with drift detection
 - **GitOps Workflow**: All changes tracked in Git with rollback capabilities
@@ -15,22 +16,22 @@ This repository manages Microsoft Sentinel detection rules using Infrastructure 
 
 ### Adding a New Detection Rule
 
-1. Create a new Bicep file in `rules/custom/` following the naming convention: `[ORG] – <Thing Detected> (T####[#.###]).bicep`
-2. Add parameters to `rules/custom/params/dev.jsonc` and `rules/custom/params/prod.jsonc`
-3. Test locally: `az bicep build --file rules/custom/your-rule.bicep`
+1. Create a new KQL file in `kql/` directory
+2. Add rule configuration to `env/deploy-dev.bicep` and `env/deploy-prod.bicep`
+3. Test locally: `az bicep build --file env/deploy-dev.bicep`
 4. Create a PR - the pipeline will deploy to Dev automatically
 
 ### Local Testing
 
 ```bash
 # Build and validate Bicep
-az bicep build --file rules/custom/your-rule.bicep
+az bicep build --file env/deploy-dev.bicep
 
 # What-if deployment (Dev environment)
 az deployment group what-if \
   --resource-group $SENTINEL_RG_DEV \
-  --template-file rules/custom/your-rule.bicep \
-  --parameters rules/custom/params/dev.jsonc
+  --template-file env/deploy-dev.bicep \
+  --parameters env/params/dev.jsonc
 ```
 
 ## Repository Secrets
@@ -52,19 +53,26 @@ Set these secrets in your GitHub repository:
 
 ```
 .
-├─ rules/
-│  ├─ custom/                         # Authoritative Bicep for deploy
-│  │  ├─ README.md
-│  │  ├─ uc-powershell-encoded.bicep
-│  │  └─ params/
-│  │     ├─ dev.jsonc
-│  │     └─ prod.jsonc
-│  └─ vendor/
-│     ├─ enabled/                     # Nightly export of running instances
-│     └─ references/                  # Vendor template references
-├─ scripts/                           # PowerShell automation scripts
-├─ .github/workflows/                 # CI/CD pipelines
-└─ docs/                             # Documentation
+├─ env/                              # Environment-specific deployments
+│  ├─ deploy-dev.bicep               # Dev environment wrapper
+│  ├─ deploy-prod.bicep              # Prod environment wrapper
+│  └─ params/                        # Simple parameter files
+│     ├─ dev.jsonc                   # Dev workspace name
+│     └─ prod.jsonc                  # Prod workspace name
+├─ infra/                            # Reusable infrastructure
+│  ├─ sentinel-rules.bicep           # Root orchestrator
+│  └─ modules/                       # Reusable modules
+│     └─ scheduledRule.bicep         # Single rule template
+├─ kql/                              # KQL detection queries
+│  ├─ uc-powershell-encoded.kql
+│  ├─ suspicious-login-attempts.kql
+│  └─ admin-account-anomaly.kql
+├─ rules/vendor/                     # Vendor rule management
+│  ├─ enabled/                       # Nightly export of running instances
+│  └─ references/                    # Vendor template references
+├─ scripts/                          # PowerShell automation scripts
+├─ .github/workflows/                # CI/CD pipelines
+└─ docs/                            # Documentation
 ```
 
 ## Workflows

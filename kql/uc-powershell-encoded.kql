@@ -1,0 +1,7 @@
+SecurityEvent
+| where EventID == 4688
+| where (NewProcessName has_cs "powershell.exe" or Process has_cs "powershell.exe")
+| where CommandLine has_any (" -enc", "-EncodedCommand")
+| extend EncArg = extract(@"(?i)-enc(?:odedCommand)?\s+(['""])?([A-Za-z0-9+/=]+)\1", 2, CommandLine)
+| where isnotempty(EncArg)
+| project TimeGenerated, Computer, SubjectUserName, CommandLine, EncArg
