@@ -38,6 +38,38 @@
     },
     "groupByFields": {
       "value": "Computer,SubjectUserName"
+    },
+
+    // New rule: Suspicious Login Attempts
+    "ruleDisplayName": {
+      "value": "[ORG] – Suspicious Login Attempts (T1078)"
+    },
+    "ruleSeverity": {
+      "value": "Medium"
+    },
+    "ruleEnabled": {
+      "value": true
+    },
+    "failedLoginThreshold": {
+      "value": 5
+    },
+    "queryFrequency": {
+      "value": "PT1H"
+    },
+    "queryPeriod": {
+      "value": "PT1H"
+    },
+    "createIncident": {
+      "value": true
+    },
+    "groupAlerts": {
+      "value": true
+    },
+    "groupingMethod": {
+      "value": "GroupByAlertDetails"
+    },
+    "groupByFields": {
+      "value": "IPAddress,AppDisplayName"
     }
   }
 }
