@@ -3,7 +3,7 @@
   "contentVersion": "1.0.0.0",
   "parameters": {
     "workspaceName": {
-      "value": "${SENTINEL_WS_DEV}"
+      "value": "sentinel-ws-dev"
     },
     "ruleDisplayName": {
       "value": "[DEV] [ORG] – Admin Account Anomaly Detection (T1078)"

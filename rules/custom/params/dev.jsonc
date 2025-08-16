@@ -4,7 +4,7 @@
   "parameters": {
     // Workspace reference (used by all rules)
     "workspaceName": {
-      "value": "${SENTINEL_WS_DEV}"
+      "value": "sentinel-ws-dev"
     },
 
     // =============================================================================

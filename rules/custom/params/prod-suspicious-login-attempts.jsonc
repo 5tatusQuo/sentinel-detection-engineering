@@ -3,7 +3,7 @@
   "contentVersion": "1.0.0.0",
   "parameters": {
     "workspaceName": {
-      "value": "${SENTINEL_WS_PROD}"
+      "value": "sentinel-ws-prod"
     },
     "ruleDisplayName": {
       "value": "[ORG] – Suspicious Login Attempts (T1078)"
