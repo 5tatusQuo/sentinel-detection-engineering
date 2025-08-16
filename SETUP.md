@@ -55,30 +55,141 @@ Add these users as required reviewers:
 - [ ] Detection engineering team members
 - [ ] Platform team representative
 
-### 4. OIDC Setup for Azure Authentication
+### 4. Azure Authentication Setup for GitHub Actions
 
-#### Create OIDC Application
+#### Option 1: Service Principal with Federated Identity Credential (Recommended)
+
+This approach creates a service principal with federated identity credentials for secure OIDC authentication.
+
+##### Step 1: Create Service Principal
 ```bash
-# Create OIDC application
-az ad app create --display-name "GitHub-Sentinel-Deploy"
+# Create service principal with contributor role
+az ad sp create-for-rbac \
+  --name "GitHubActions-SentinelDetection" \
+  --role contributor \
+  --scopes /subscriptions/YOUR_SUBSCRIPTION_ID
 
-# Get the client ID
-az ad app list --display-name "GitHub-Sentinel-Deploy" --query "[].appId" -o tsv
-
-# Create service principal
-az ad sp create --id <client-id>
-
-# Assign roles
-az role assignment create \
-  --assignee <client-id> \
-  --role "Contributor" \
-  --scope "/subscriptions/<subscription-id>/resourceGroups/<resource-group>"
+# Example output:
+# {
+#   "appId": "8f1597dc-193c-4140-8e37-300267ae2a2c",
+#   "displayName": "GitHubActions-SentinelDetection",
+#   "password": "8pB8Q~rUvBFRLO33N.4.9OweMWGInTkzdV1zTbRh",
+#   "tenant": "8ce4f53f-7e15-4085-bf21-8382a294003f"
+# }
 ```
 
-#### Configure GitHub OIDC
-Add this to your repository settings:
-- **Audience**: `api://AzureADTokenExchange`
-- **Issuer**: `https://token.actions.githubusercontent.com`
+##### Step 2: Get Service Principal Object ID
+```bash
+# Get the service principal object ID
+SP_OBJECT_ID=$(az ad sp list --display-name "GitHubActions-SentinelDetection" --query "[].id" -o tsv)
+echo "Service Principal Object ID: $SP_OBJECT_ID"
+```
+
+##### Step 3: Get Application Object ID
+```bash
+# Get the application object ID (needed for federated credential)
+APP_OBJECT_ID=$(az ad app list --display-name "GitHubActions-SentinelDetection" --query "[].id" -o tsv)
+echo "Application Object ID: $APP_OBJECT_ID"
+```
+
+##### Step 4: Create Federated Identity Credential
+```bash
+# Create federated identity credential for GitHub Actions
+az ad app federated-credential create \
+  --id $APP_OBJECT_ID \
+  --parameters "{\"name\":\"github-actions\",\"issuer\":\"https://token.actions.githubusercontent.com\",\"subject\":\"repo:YOUR_ORG/YOUR_REPO:ref:refs/heads/main\",\"audiences\":[\"api://AzureADTokenExchange\"]}"
+
+# Replace YOUR_ORG/YOUR_REPO with your actual repository (e.g., 5tatusQuo/sentinel-detection-engineering)
+```
+
+##### Step 5: Get Required Values for GitHub Secrets
+```bash
+# Get tenant ID
+TENANT_ID=$(az account show --query tenantId -o tsv)
+echo "Tenant ID: $TENANT_ID"
+
+# Get subscription ID
+SUBSCRIPTION_ID=$(az account show --query id -o tsv)
+echo "Subscription ID: $SUBSCRIPTION_ID"
+
+# Get client ID (application ID) of the service principal
+CLIENT_ID=$(az ad sp list --display-name "GitHubActions-SentinelDetection" --query "[].appId" -o tsv)
+echo "Client ID (App ID): $CLIENT_ID"
+```
+
+##### Step 6: Configure GitHub Repository Secrets
+Add these secrets to your GitHub repository (Settings → Secrets and variables → Actions):
+
+```
+AZURE_TENANT_ID=<tenant-id-from-step-5>
+AZURE_CLIENT_ID=<client-id-from-step-5>
+AZURE_SUBSCRIPTION_ID=<subscription-id-from-step-5>
+```
+
+#### Option 2: Using Azure Portal (Alternative)
+
+If you prefer using the Azure Portal instead of CLI commands:
+
+1. **Create App Registration**:
+   - Go to Azure Portal → Azure Active Directory → App registrations
+   - Click "New registration"
+   - Name: "GitHubActions-SentinelDetection"
+   - Select "Accounts in this organizational directory only"
+   - Click "Register"
+
+2. **Configure Federated Credential**:
+   - Go to "Certificates & secrets" → "Federated credentials"
+   - Click "Add credential"
+   - Choose "GitHub Actions"
+   - Configure:
+     - **Repository**: `YOUR_ORG/YOUR_REPO`
+     - **Entity type**: Branch
+     - **GitHub branch name**: `main`
+     - **Name**: `github-actions-main`
+
+3. **Assign Permissions**:
+   - Go to "API permissions"
+   - Click "Add a permission"
+   - Select "Azure Service Management"
+   - Choose "Delegated" permissions
+   - Select "user_impersonation"
+   - Click "Grant admin consent"
+
+4. **Get Values for GitHub Secrets**:
+   - **Application (client) ID**: Copy from Overview page
+   - **Directory (tenant) ID**: Copy from Overview page
+   - **Subscription ID**: Get from Azure Portal → Subscriptions
+
+#### Verify Setup
+
+Test the authentication by running the vendor sync workflow:
+
+```bash
+# Manual trigger from GitHub CLI
+gh workflow run vendor-sync.yml -f workspace=dev
+
+# Or trigger from GitHub Actions UI
+# Go to Actions → Vendor Rule Sync → Run workflow
+```
+
+#### Troubleshooting Authentication Issues
+
+If you encounter authentication errors:
+
+```bash
+# Test Azure CLI authentication
+az login
+az account show
+
+# Test token generation
+az account get-access-token --resource "https://management.azure.com"
+
+# Verify service principal exists
+az ad sp list --display-name "GitHubActions-SentinelDetection"
+
+# Check federated credentials
+az ad app federated-credential list --id <APP_OBJECT_ID>
+```
 
 ## 🚀 Initial Deployment
 
@@ -176,14 +287,52 @@ Update these files with your organization's specifics:
 
 ### Common Issues
 
-#### Azure Authentication
+#### Azure Authentication Issues
+
+**Common Error**: `AADSTS700016: Application with identifier '***' was not found in the directory`
+
+**Solution**: This occurs when the federated identity credential is not properly configured. Follow these steps:
+
 ```bash
-# Test Azure CLI authentication
+# 1. Verify service principal exists
+az ad sp list --display-name "GitHubActions-SentinelDetection"
+
+# 2. Check if federated credential exists
+APP_OBJECT_ID=$(az ad app list --display-name "GitHubActions-SentinelDetection" --query "[].id" -o tsv)
+az ad app federated-credential list --id $APP_OBJECT_ID
+
+# 3. If federated credential is missing, recreate it
+az ad app federated-credential create \
+  --id $APP_OBJECT_ID \
+  --parameters "{\"name\":\"github-actions\",\"issuer\":\"https://token.actions.githubusercontent.com\",\"subject\":\"repo:YOUR_ORG/YOUR_REPO:ref:refs/heads/main\",\"audiences\":[\"api://AzureADTokenExchange\"]}"
+```
+
+**Common Error**: `Get-AzAccessToken: The term 'Get-AzAccessToken' is not recognized`
+
+**Solution**: The PowerShell script needs to use Azure CLI instead of Azure PowerShell:
+
+```powershell
+# Instead of Get-AzAccessToken, use:
+$tokenResponse = az account get-access-token --resource "https://management.azure.com" | ConvertFrom-Json
+$token = $tokenResponse.accessToken
+```
+
+**Common Error**: `Permission to repository denied to github-actions[bot]`
+
+**Solution**: Update workflow permissions and use proper git authentication:
+
+```yaml
+permissions:
+  id-token: write
+  contents: write
+  pull-requests: write
+```
+
+**Test Azure CLI authentication**:
+```bash
 az login
 az account show
-
-# Test OIDC
-az account get-access-token --resource https://management.azure.com
+az account get-access-token --resource "https://management.azure.com"
 ```
 
 #### Bicep Build Issues
