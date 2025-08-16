@@ -123,15 +123,6 @@ resource sentinelRule 'Microsoft.SecurityInsights/alertRules@2025-06-01' = {
           }
         ]
       }
-      {
-        entityType: 'Account'
-        fieldMappings: [
-          {
-            identifier: 'Name'
-            columnName: 'UserNames'
-          }
-        ]
-      }
     ]
     
     alertDetailsOverride: {
@@ -142,7 +133,6 @@ resource sentinelRule 'Microsoft.SecurityInsights/alertRules@2025-06-01' = {
     customDetails: {
       FailedAttempts: 'FailedAttempts'
       AppDisplayName: 'AppDisplayName'
-      UserNames: 'UserNames'
     }
   }
 }
