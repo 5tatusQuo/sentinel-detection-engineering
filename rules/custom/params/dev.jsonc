@@ -3,10 +3,8 @@
   "contentVersion": "1.0.0.0",
   "parameters": {
     // Workspace reference
-    "workspace": {
-      "value": {
-        "id": "/subscriptions/${AZURE_SUBSCRIPTION_ID}/resourceGroups/${SENTINEL_RG_DEV}/providers/Microsoft.OperationalInsights/workspaces/${SENTINEL_WS_DEV}"
-      }
+    "workspaceName": {
+      "value": "${SENTINEL_WS_DEV}"
     },
 
     // PowerShell Encoded Command Rule

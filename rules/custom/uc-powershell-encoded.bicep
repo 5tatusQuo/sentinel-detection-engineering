@@ -5,8 +5,8 @@ var x_metadata = {
   owner: 'Detection Engineering'
 }
 
-@description('Reference to the Log Analytics workspace')
-param workspace resource
+@description('Name of the Log Analytics workspace')
+param workspaceName string
 
 @description('The name that will appear in the Sentinel portal')
 param ruleName string = '[ORG] – Suspicious PowerShell (EncodedCommand)'
@@ -66,9 +66,14 @@ param groupingMethod string = 'GroupByAlertDetails'
 @description('Fields to group by (comma-separated)')
 param groupByFields string = 'Computer,SubjectUserName'
 
+// Reference the existing Log Analytics workspace
+resource la 'Microsoft.OperationalInsights/workspaces@2022-10-01' existing = {
+  name: workspaceName
+}
+
 resource sentinelRule 'Microsoft.SecurityInsights/alertRules@2025-06-01' = {
-  parent: workspace
-  name: guid(workspace.id, ruleName)
+  scope: la
+  name: guid(la.id, ruleName)
   kind: 'Scheduled'
   properties: {
     displayName: ruleName
@@ -124,3 +129,8 @@ resource sentinelRule 'Microsoft.SecurityInsights/alertRules@2025-06-01' = {
     }
   }
 }
+
+output ruleName string = sentinelRule.name
+output ruleDisplayName string = sentinelRule.properties.displayName
+output ruleEnabled bool = sentinelRule.properties.enabled
+output workspaceName string = la.name

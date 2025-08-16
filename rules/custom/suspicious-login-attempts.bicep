@@ -9,8 +9,8 @@
 // =============================================================================
 
 // Workspace reference
-@description('Reference to the Log Analytics workspace')
-param workspace resource
+@description('Name of the Log Analytics workspace')
+param workspaceName string
 
 // Basic rule settings
 @description('Display name for the detection rule')
@@ -68,11 +68,20 @@ param groupingMethod string = 'AllEntities'
 param groupByFields string = 'IPAddress'
 
 // =============================================================================
-// STEP 2: THE ACTUAL RULE
+// STEP 2: EXISTING RESOURCES
+// =============================================================================
+
+// Reference the existing Log Analytics workspace
+resource la 'Microsoft.OperationalInsights/workspaces@2022-10-01' existing = {
+  name: workspaceName
+}
+
+// =============================================================================
+// STEP 3: THE ACTUAL RULE
 // =============================================================================
 resource sentinelRule 'Microsoft.SecurityInsights/alertRules@2025-06-01' = {
-  parent: workspace
-  name: guid(workspace.id, ruleDisplayName)
+  scope: la
+  name: guid(la.id, ruleDisplayName)
   kind: 'Scheduled'
   
   properties: {
@@ -140,8 +149,9 @@ resource sentinelRule 'Microsoft.SecurityInsights/alertRules@2025-06-01' = {
 }
 
 // =============================================================================
-// STEP 3: OUTPUTS
+// STEP 4: OUTPUTS
 // =============================================================================
 output ruleName string = sentinelRule.name
 output ruleDisplayName string = sentinelRule.properties.displayName
 output ruleEnabled bool = sentinelRule.properties.enabled
+output workspaceName string = la.name
