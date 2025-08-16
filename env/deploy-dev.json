@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.37.4.10188",
-      "templateHash": "4075284892164594063"
+      "templateHash": "5837581989238763648"
     }
   },
   "parameters": {
@@ -28,6 +28,8 @@
         "kql": "[variables('kqlEncoded')]",
         "severity": "Low",
         "enabled": true,
+        "frequency": "PT1H",
+        "period": "PT1H",
         "tactics": [
           "Execution",
           "DefenseEvasion"
@@ -55,6 +57,8 @@
         "kql": "[variables('kqlLogin')]",
         "severity": "Low",
         "enabled": true,
+        "frequency": "PT1H",
+        "period": "PT1H",
         "tactics": [
           "InitialAccess"
         ],
@@ -72,6 +76,8 @@
         "kql": "[variables('kqlAdmin')]",
         "severity": "Medium",
         "enabled": true,
+        "frequency": "PT1H",
+        "period": "PT1H",
         "tactics": [
           "Persistence",
           "PrivilegeEscalation",

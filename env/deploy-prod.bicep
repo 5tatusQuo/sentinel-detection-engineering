@@ -15,6 +15,8 @@ var rules = [
     kql: kqlEncoded
     severity: 'Medium'
     enabled: true
+    frequency: 'PT1H'
+    period: 'PT1H'
     tactics: [ 'Execution', 'DefenseEvasion' ]
     techniques: [ 'T1059.001' ]
     createIncident: true
@@ -37,6 +39,8 @@ var rules = [
     kql: kqlLogin
     severity: 'Medium'
     enabled: true
+    frequency: 'PT1H'
+    period: 'PT1H'
     tactics: [ 'InitialAccess' ]
     techniques: [ 'T1078' ]
     createIncident: true
@@ -50,6 +54,8 @@ var rules = [
     kql: kqlAdmin
     severity: 'High'
     enabled: true
+    frequency: 'PT1H'
+    period: 'PT1H'
     tactics: [ 'Persistence', 'PrivilegeEscalation', 'DefenseEvasion' ]
     techniques: [ 'T1078' ]
     createIncident: true
