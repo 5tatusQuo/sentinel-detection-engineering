@@ -9,7 +9,10 @@ var x_metadata = {
 param workspaceName string
 
 @description('The name that will appear in the Sentinel portal')
-param ruleName string = '[ORG] – Suspicious PowerShell (EncodedCommand)'
+param ruleDisplayName string = '[ORG] – Suspicious PowerShell (EncodedCommand)'
+
+@description('Whether the rule is enabled')
+param ruleEnabled bool = true
 
 @description('How serious is this threat?')
 @allowed([
@@ -19,13 +22,10 @@ param ruleName string = '[ORG] – Suspicious PowerShell (EncodedCommand)'
   'Low'
   'Informational'
 ])
-param severity string = 'Medium'
-
-@description('Should this rule be turned on?')
-param enabled bool = true
+param ruleSeverity string = 'Medium'
 
 @description('The KQL query that detects encoded PowerShell')
-param query string = '''
+param detectionQuery string = '''
 SecurityEvent
 | where EventID == 4104
 | where EventData contains "EncodedCommand"
@@ -37,14 +37,20 @@ SecurityEvent
 | project TimeGenerated, Computer, SubjectUserName, EncodedCommand, DecodedCommand
 '''
 
+@description('How often to run the query')
+param queryFrequency string = 'PT1H'
+
+@description('Time window for the query')
+param queryPeriod string = 'PT1H'
+
 @description('Which MITRE ATT&CK tactics does this detect?')
-param tactics array = [
+param attackTactics array = [
   'Execution'
   'DefenseEvasion'
 ]
 
 @description('Which specific MITRE ATT&CK techniques does this detect?')
-param techniques array = [
+param attackTechniques array = [
   'T1059.001'
 ]
 
@@ -60,6 +66,9 @@ param groupAlerts bool = true
   'GroupByAlertDetails'
   'GroupByCustomDetails'
   'GroupByEntities'
+  'AllEntities'
+  'Custom'
+  'None'
 ])
 param groupingMethod string = 'GroupByAlertDetails'
 
@@ -73,20 +82,20 @@ resource la 'Microsoft.OperationalInsights/workspaces@2022-10-01' existing = {
 
 resource sentinelRule 'Microsoft.SecurityInsights/alertRules@2025-06-01' = {
   scope: la
-  name: guid(la.id, ruleName)
+  name: guid(la.id, ruleDisplayName)
   kind: 'Scheduled'
   properties: {
-    displayName: ruleName
+    displayName: ruleDisplayName
     description: 'Detects PowerShell commands that use encoded commands, which is a common technique used by attackers to obfuscate malicious PowerShell code and evade detection.'
-    enabled: enabled
-    severity: severity
-    query: query
-    queryFrequency: 'PT1H'
-    queryPeriod: 'PT1H'
+    enabled: ruleEnabled
+    severity: ruleSeverity
+    query: detectionQuery
+    queryFrequency: queryFrequency
+    queryPeriod: queryPeriod
     triggerOperator: 'GreaterThan'
     triggerThreshold: 0
-    tactics: tactics
-    techniques: techniques
+    tactics: attackTactics
+    techniques: attackTechniques
     suppressionEnabled: false
     suppressionDuration: 'PT0H'
     incidentConfiguration: {
@@ -101,36 +110,34 @@ resource sentinelRule 'Microsoft.SecurityInsights/alertRules@2025-06-01' = {
     }
     entityMappings: [
       {
-        entityType: 'Host'
+        entityType: 'Account'
         fieldMappings: [
           {
             identifier: 'FullName'
-            columnName: 'Computer'
+            columnName: 'SubjectUserName'
           }
         ]
       }
       {
-        entityType: 'Account'
+        entityType: 'Host'
         fieldMappings: [
           {
-            identifier: 'Name'
-            columnName: 'SubjectUserName'
+            identifier: 'HostName'
+            columnName: 'Computer'
           }
         ]
       }
     ]
     alertDetailsOverride: {
       alertDisplayNameFormat: 'Suspicious PowerShell Encoded Command Detected'
-      alertDescriptionFormat: 'A suspicious PowerShell encoded command was detected on {Computer} by user {SubjectUserName}.'
+      alertDescriptionFormat: 'A suspicious PowerShell command using encoded commands was detected on {Computer} by user {SubjectUserName}. This technique is commonly used by attackers to obfuscate malicious code.'
     }
     customDetails: {
-      EncodedCommand: 'EncodedCommand'
-      DecodedCommand: 'DecodedCommand'
+      'Encoded Command': '{{EncodedCommand}}'
+      'Decoded Command': '{{DecodedCommand}}'
     }
   }
 }
 
-output ruleName string = sentinelRule.name
-output ruleDisplayName string = sentinelRule.properties.displayName
-output ruleEnabled bool = sentinelRule.properties.enabled
+output ruleName string = sentinelRule.properties.displayName
 output workspaceName string = la.name

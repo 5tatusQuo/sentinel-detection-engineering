@@ -2,25 +2,20 @@
   "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
   "contentVersion": "1.0.0.0",
   "parameters": {
-    // Workspace reference (used by all rules)
     "workspaceName": {
-      "value": "${SENTINEL_WS_PROD}"
+      "value": "${SENTINEL_WS_DEV}"
     },
-
-    // =============================================================================
-    // PowerShell Encoded Command Rule Parameters
-    // =============================================================================
     "ruleDisplayName": {
-      "value": "[ORG] – Suspicious PowerShell (EncodedCommand)"
+      "value": "[DEV] [ORG] – Suspicious PowerShell (EncodedCommand)"
     },
     "ruleEnabled": {
       "value": true
     },
     "ruleSeverity": {
-      "value": "Medium"
+      "value": "Low"
     },
     "detectionQuery": {
-      "value": "SecurityEvent | where EventID == 4104 | where CommandLine contains \"-EncodedCommand\""
+      "value": "SecurityEvent | where EventID == 4104 | where CommandLine contains \"-EncodedCommand\" | take 100"
     },
     "queryFrequency": {
       "value": "PT1H"
@@ -40,7 +35,7 @@
       ]
     },
     "createIncident": {
-      "value": true
+      "value": false
     },
     "groupAlerts": {
       "value": true
@@ -53,6 +48,3 @@
     }
   }
 }
-
-
-

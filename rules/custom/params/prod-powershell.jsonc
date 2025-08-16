@@ -2,14 +2,9 @@
   "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
   "contentVersion": "1.0.0.0",
   "parameters": {
-    // Workspace reference (used by all rules)
     "workspaceName": {
       "value": "${SENTINEL_WS_PROD}"
     },
-
-    // =============================================================================
-    // PowerShell Encoded Command Rule Parameters
-    // =============================================================================
     "ruleDisplayName": {
       "value": "[ORG] – Suspicious PowerShell (EncodedCommand)"
     },
@@ -53,6 +48,3 @@
     }
   }
 }
-
-
-

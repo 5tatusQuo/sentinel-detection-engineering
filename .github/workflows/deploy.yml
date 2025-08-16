@@ -83,12 +83,20 @@ jobs:
         echo "Running what-if deployment for Dev environment..."
         for file in rules/custom/*.bicep; do
           if [ -f "$file" ]; then
-            echo "What-if for $file"
-            az deployment group what-if \
-              --resource-group ${{ secrets.SENTINEL_RG_DEV }} \
-              --template-file "$file" \
-              --parameters rules/custom/params/dev.jsonc \
-              --no-pretty-print
+            # Extract the base name without extension
+            basename=$(basename "$file" .bicep)
+            param_file="rules/custom/params/dev-${basename}.jsonc"
+            
+            echo "What-if for $file using $param_file"
+            if [ -f "$param_file" ]; then
+              az deployment group what-if \
+                --resource-group ${{ secrets.SENTINEL_RG_DEV }} \
+                --template-file "$file" \
+                --parameters "$param_file" \
+                --no-pretty-print
+            else
+              echo "⚠️  Parameter file $param_file not found, skipping $file"
+            fi
           fi
         done
         echo "✅ What-if deployment completed successfully"
@@ -134,12 +142,20 @@ jobs:
         echo "Deploying to Dev environment..."
         for file in rules/custom/*.bicep; do
           if [ -f "$file" ]; then
-            echo "Deploying $file"
-            az deployment group create \
-              --resource-group ${{ secrets.SENTINEL_RG_DEV }} \
-              --template-file "$file" \
-              --parameters rules/custom/params/dev.jsonc \
-              --verbose
+            # Extract the base name without extension
+            basename=$(basename "$file" .bicep)
+            param_file="rules/custom/params/dev-${basename}.jsonc"
+            
+            echo "Deploying $file using $param_file"
+            if [ -f "$param_file" ]; then
+              az deployment group create \
+                --resource-group ${{ secrets.SENTINEL_RG_DEV }} \
+                --template-file "$file" \
+                --parameters "$param_file" \
+                --verbose
+            else
+              echo "⚠️  Parameter file $param_file not found, skipping $file"
+            fi
           fi
         done
         echo "✅ Dev deployment completed successfully"
@@ -186,12 +202,20 @@ jobs:
         echo "Deploying to Production environment..."
         for file in rules/custom/*.bicep; do
           if [ -f "$file" ]; then
-            echo "Deploying $file"
-            az deployment group create \
-              --resource-group ${{ secrets.SENTINEL_RG_PROD }} \
-              --template-file "$file" \
-              --parameters rules/custom/params/prod.jsonc \
-              --verbose
+            # Extract the base name without extension
+            basename=$(basename "$file" .bicep)
+            param_file="rules/custom/params/prod-${basename}.jsonc"
+            
+            echo "Deploying $file using $param_file"
+            if [ -f "$param_file" ]; then
+              az deployment group create \
+                --resource-group ${{ secrets.SENTINEL_RG_PROD }} \
+                --template-file "$file" \
+                --parameters "$param_file" \
+                --verbose
+            else
+              echo "⚠️  Parameter file $param_file not found, skipping $file"
+            fi
           fi
         done
         echo "✅ Production deployment completed successfully"

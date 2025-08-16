@@ -2,16 +2,11 @@
   "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
   "contentVersion": "1.0.0.0",
   "parameters": {
-    // Workspace reference (used by all rules)
     "workspaceName": {
       "value": "${SENTINEL_WS_DEV}"
     },
-
-    // =============================================================================
-    // PowerShell Encoded Command Rule Parameters
-    // =============================================================================
     "ruleDisplayName": {
-      "value": "[DEV] [ORG] – Suspicious PowerShell (EncodedCommand)"
+      "value": "[DEV] [ORG] – Suspicious Login Attempts (T1078)"
     },
     "ruleEnabled": {
       "value": true
@@ -20,7 +15,7 @@
       "value": "Low"
     },
     "detectionQuery": {
-      "value": "SecurityEvent | where EventID == 4104 | where CommandLine contains \"-EncodedCommand\" | take 100"
+      "value": "SigninLogs | where TimeGenerated > ago(1h) | where ResultType != 0 | summarize FailedAttempts = count() by IPAddress, AppDisplayName, bin(TimeGenerated, 5m) | where FailedAttempts >= 3 | take 100"
     },
     "queryFrequency": {
       "value": "PT1H"
@@ -30,13 +25,13 @@
     },
     "attackTactics": {
       "value": [
-        "Execution",
-        "DefenseEvasion"
+        "InitialAccess",
+        "Persistence"
       ]
     },
     "attackTechniques": {
       "value": [
-        "T1059.001"
+        "T1078"
       ]
     },
     "createIncident": {
@@ -46,13 +41,10 @@
       "value": true
     },
     "groupingMethod": {
-      "value": "GroupByAlertDetails"
+      "value": "AllEntities"
     },
     "groupByFields": {
-      "value": "Computer,SubjectUserName"
+      "value": "IPAddress"
     }
   }
 }
-
-
-

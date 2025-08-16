@@ -2,25 +2,20 @@
   "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
   "contentVersion": "1.0.0.0",
   "parameters": {
-    // Workspace reference (used by all rules)
     "workspaceName": {
       "value": "${SENTINEL_WS_PROD}"
     },
-
-    // =============================================================================
-    // PowerShell Encoded Command Rule Parameters
-    // =============================================================================
     "ruleDisplayName": {
-      "value": "[ORG] – Suspicious PowerShell (EncodedCommand)"
+      "value": "[ORG] – Admin Account Anomaly Detection (T1078)"
     },
     "ruleEnabled": {
       "value": true
     },
     "ruleSeverity": {
-      "value": "Medium"
+      "value": "High"
     },
     "detectionQuery": {
-      "value": "SecurityEvent | where EventID == 4104 | where CommandLine contains \"-EncodedCommand\""
+      "value": "SigninLogs | where TimeGenerated > ago(1h) | where ResultType == 0 | where UserPrincipalName has \"@\" | where AppDisplayName in~ (\"Microsoft Azure PowerShell\", \"Microsoft Azure CLI\", \"Azure Portal\") | summarize LoginCount = count(), Applications = make_set(AppDisplayName), IPAddresses = make_set(IPAddress), Locations = make_set(Location), TimeSpan = max(TimeGenerated) - min(TimeGenerated) by UserPrincipalName, bin(TimeGenerated, 5m) | where LoginCount >= 3 | where TimeSpan < 30m"
     },
     "queryFrequency": {
       "value": "PT1H"
@@ -30,13 +25,14 @@
     },
     "attackTactics": {
       "value": [
-        "Execution",
+        "Persistence",
+        "PrivilegeEscalation",
         "DefenseEvasion"
       ]
     },
     "attackTechniques": {
       "value": [
-        "T1059.001"
+        "T1078"
       ]
     },
     "createIncident": {
@@ -46,13 +42,10 @@
       "value": true
     },
     "groupingMethod": {
-      "value": "GroupByAlertDetails"
+      "value": "AllEntities"
     },
     "groupByFields": {
-      "value": "Computer,SubjectUserName"
+      "value": "UserPrincipalName"
     }
   }
 }
-
-
-
