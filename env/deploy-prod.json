@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.37.4.10188",
-      "templateHash": "8192485550834147921"
+      "templateHash": "10164746799288796954"
     }
   },
   "parameters": {
@@ -28,12 +28,14 @@
         "kql": "[variables('kqlEncoded')]",
         "severity": "Medium",
         "enabled": true,
+        "frequency": "PT1H",
+        "period": "PT1H",
         "tactics": [
           "Execution",
           "DefenseEvasion"
         ],
         "techniques": [
-          "T1059.001"
+          "T1059"
         ],
         "createIncident": true,
         "grouping": {
@@ -55,6 +57,8 @@
         "kql": "[variables('kqlLogin')]",
         "severity": "Medium",
         "enabled": true,
+        "frequency": "PT1H",
+        "period": "PT1H",
         "tactics": [
           "InitialAccess"
         ],
@@ -72,6 +76,8 @@
         "kql": "[variables('kqlAdmin')]",
         "severity": "High",
         "enabled": true,
+        "frequency": "PT1H",
+        "period": "PT1H",
         "tactics": [
           "Persistence",
           "PrivilegeEscalation",
@@ -116,7 +122,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.37.4.10188",
-              "templateHash": "17302980523919802777"
+              "templateHash": "7392736661845730240"
             }
           },
           "parameters": {
@@ -161,26 +167,24 @@
                   "workspaceName": {
                     "value": "[parameters('workspaceName')]"
                   },
-                  "enabled": {
-                    "value": "[coalesce(parameters('rules')[copyIndex()].enabled, true())]"
-                  },
                   "severity": {
-                    "value": "[coalesce(parameters('rules')[copyIndex()].severity, 'Medium')]"
+                    "value": "[parameters('rules')[copyIndex()].severity]"
                   },
+                  "enabled": "[if(equals(parameters('rules')[copyIndex()].enabled, null()), createObject('value', true()), createObject('value', bool(parameters('rules')[copyIndex()].enabled)))]",
                   "frequency": {
-                    "value": "[coalesce(parameters('rules')[copyIndex()].frequency, 'PT1H')]"
+                    "value": "[parameters('rules')[copyIndex()].frequency]"
                   },
                   "period": {
-                    "value": "[coalesce(parameters('rules')[copyIndex()].period, 'PT1H')]"
-                  },
-                  "tactics": {
-                    "value": "[coalesce(parameters('rules')[copyIndex()].tactics, createArray())]"
-                  },
-                  "techniques": {
-                    "value": "[coalesce(parameters('rules')[copyIndex()].techniques, createArray())]"
+                    "value": "[parameters('rules')[copyIndex()].period]"
                   },
                   "createIncident": {
-                    "value": "[coalesce(parameters('rules')[copyIndex()].createIncident, true())]"
+                    "value": "[parameters('rules')[copyIndex()].createIncident]"
+                  },
+                  "tactics": {
+                    "value": "[parameters('rules')[copyIndex()].tactics]"
+                  },
+                  "techniques": {
+                    "value": "[parameters('rules')[copyIndex()].techniques]"
                   },
                   "grouping": {
                     "value": "[coalesce(parameters('rules')[copyIndex()].grouping, createObject())]"
@@ -199,7 +203,7 @@
                     "_generator": {
                       "name": "bicep",
                       "version": "0.37.4.10188",
-                      "templateHash": "156141579547753272"
+                      "templateHash": "4033084776913807239"
                     }
                   },
                   "parameters": {
@@ -244,10 +248,7 @@
                     },
                     "tactics": {
                       "type": "array",
-                      "defaultValue": [],
-                      "metadata": {
-                        "description": "ATT&CK"
-                      }
+                      "defaultValue": []
                     },
                     "techniques": {
                       "type": "array",
@@ -255,35 +256,35 @@
                     },
                     "grouping": {
                       "type": "object",
-                      "defaultValue": {
-                        "enabled": true,
-                        "matchingMethod": "AllEntities",
-                        "lookbackDuration": "PT2H",
-                        "reopenClosedIncident": false,
-                        "groupByEntities": [],
-                        "groupByAlertDetails": [],
-                        "groupByCustomDetails": []
-                      },
-                      "metadata": {
-                        "description": "Grouping settings (optional)"
-                      }
+                      "defaultValue": {}
                     },
                     "entities": {
                       "type": "object",
-                      "defaultValue": {},
-                      "metadata": {
-                        "description": "Entity mappings (optional). Example: { accountFullName: \"SubjectUserName\", hostName: \"Computer\" }"
-                      }
+                      "defaultValue": {}
                     },
                     "customDetails": {
                       "type": "object",
-                      "defaultValue": {},
-                      "metadata": {
-                        "description": "Alert custom details (optional). Example: { EncodedArgument: \"EncArg\", CommandLine: \"CommandLine\" }"
-                      }
+                      "defaultValue": {}
                     }
                   },
                   "variables": {
+                    "groupingDefaults": {
+                      "enabled": true,
+                      "matchingMethod": "AllEntities",
+                      "lookbackDuration": "PT2H",
+                      "reopenClosedIncident": false,
+                      "groupByEntities": [],
+                      "groupByAlertDetails": [],
+                      "groupByCustomDetails": []
+                    },
+                    "g": "[union(variables('groupingDefaults'), parameters('grouping'))]",
+                    "entitiesDefaults": {
+                      "accountFullName": null,
+                      "hostName": null,
+                      "ipAddress": null
+                    },
+                    "e": "[union(variables('entitiesDefaults'), parameters('entities'))]",
+                    "cd": "[parameters('customDetails')]",
                     "ruleId": "[guid(deployment().name, parameters('name'))]"
                   },
                   "resources": [
@@ -310,20 +311,20 @@
                         "incidentConfiguration": {
                           "createIncident": "[parameters('createIncident')]",
                           "groupingConfiguration": {
-                            "enabled": "[parameters('grouping').enabled]",
-                            "reopenClosedIncident": "[parameters('grouping').reopenClosedIncident]",
-                            "lookbackDuration": "[parameters('grouping').lookbackDuration]",
-                            "matchingMethod": "[parameters('grouping').matchingMethod]",
-                            "groupByEntities": "[parameters('grouping').groupByEntities]",
-                            "groupByAlertDetails": "[parameters('grouping').groupByAlertDetails]",
-                            "groupByCustomDetails": "[parameters('grouping').groupByCustomDetails]"
+                            "enabled": "[variables('g').enabled]",
+                            "matchingMethod": "[variables('g').matchingMethod]",
+                            "lookbackDuration": "[variables('g').lookbackDuration]",
+                            "reopenClosedIncident": "[variables('g').reopenClosedIncident]",
+                            "groupByEntities": "[variables('g').groupByEntities]",
+                            "groupByAlertDetails": "[variables('g').groupByAlertDetails]",
+                            "groupByCustomDetails": "[variables('g').groupByCustomDetails]"
                           }
                         },
-                        "entityMappings": "[if(greater(length(parameters('entities')), 0), flatten(createArray(if(not(equals(parameters('entities').accountFullName, null())), createArray(createObject('entityType', 'Account', 'fieldMappings', createArray(createObject('identifier', 'FullName', 'columnName', string(parameters('entities').accountFullName))))), createArray()), if(not(equals(parameters('entities').hostName, null())), createArray(createObject('entityType', 'Host', 'fieldMappings', createArray(createObject('identifier', 'HostName', 'columnName', string(parameters('entities').hostName))))), createArray()), if(not(equals(parameters('entities').ipAddress, null())), createArray(createObject('entityType', 'IP', 'fieldMappings', createArray(createObject('identifier', 'Address', 'columnName', string(parameters('entities').ipAddress))))), createArray()))), createArray())]",
+                        "entityMappings": "[if(greater(length(parameters('entities')), 0), flatten(createArray(if(not(equals(variables('e').accountFullName, null())), createArray(createObject('entityType', 'Account', 'fieldMappings', createArray(createObject('identifier', 'FullName', 'columnName', string(variables('e').accountFullName))))), createArray()), if(not(equals(variables('e').hostName, null())), createArray(createObject('entityType', 'Host', 'fieldMappings', createArray(createObject('identifier', 'HostName', 'columnName', string(variables('e').hostName))))), createArray()), if(not(equals(variables('e').ipAddress, null())), createArray(createObject('entityType', 'IP', 'fieldMappings', createArray(createObject('identifier', 'Address', 'columnName', string(variables('e').ipAddress))))), createArray()))), createArray())]",
                         "alertDetailsOverride": {
                           "alertDisplayNameFormat": "[parameters('displayName')]"
                         },
-                        "customDetails": "[parameters('customDetails')]"
+                        "customDetails": "[variables('cd')]"
                       }
                     }
                   ],

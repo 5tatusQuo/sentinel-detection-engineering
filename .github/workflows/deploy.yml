@@ -170,9 +170,9 @@ jobs:
         echo "Listing infra directory:"
         ls -la infra/ || echo "infra directory not found"
     
-    - name: Validate Bicep templates
+    - name: Validate Bicep templates (static)
       run: |
-        echo "Validating Bicep templates..."
+        echo "Validating Bicep templates (static checks)..."
         if [ "${{ needs.detect-deployment-needs.outputs.needs-deployment }}" == "true" ]; then
           echo "Building main templates..."
           az bicep build --file infra/sentinel-rules.bicep
@@ -180,6 +180,19 @@ jobs:
           az bicep build --file env/deploy-dev.bicep
           az bicep build --file env/deploy-prod.bicep
           echo "✅ Bicep templates validated successfully"
+        else
+          echo "No deployment needed - skipping validation"
+        fi
+    
+    - name: Validate deployment (Dev)
+      run: |
+        echo "Validating deployment against Dev environment..."
+        if [ "${{ needs.detect-deployment-needs.outputs.needs-deployment }}" == "true" ]; then
+          az deployment group validate \
+            --resource-group ${{ secrets.SENTINEL_RG_DEV }} \
+            --template-file env/deploy-dev.bicep \
+            --parameters env/params/dev.jsonc
+          echo "✅ Dev deployment validation completed successfully"
         else
           echo "No deployment needed - skipping validation"
         fi
@@ -192,7 +205,7 @@ jobs:
             --resource-group ${{ secrets.SENTINEL_RG_DEV }} \
             --template-file env/deploy-dev.bicep \
             --parameters env/params/dev.jsonc \
-            --no-pretty-print
+            --no-pretty-print --only-show-errors
           echo "✅ What-if deployment completed successfully"
         else
           echo "No deployment needed - skipping what-if"
@@ -274,6 +287,33 @@ jobs:
         client-id: ${{ secrets.AZURE_CLIENT_ID }}
         tenant-id: ${{ secrets.AZURE_TENANT_ID }}
         subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+    
+    - name: Validate deployment (Prod)
+      run: |
+        echo "Validating deployment against Prod environment..."
+        if [ "${{ needs.detect-deployment-needs.outputs.needs-deployment }}" == "true" ]; then
+          az deployment group validate \
+            --resource-group ${{ secrets.SENTINEL_RG_PROD }} \
+            --template-file env/deploy-prod.bicep \
+            --parameters env/params/prod.jsonc
+          echo "✅ Prod deployment validation completed successfully"
+        else
+          echo "No deployment needed - skipping validation"
+        fi
+    
+    - name: What-if deployment (Prod)
+      run: |
+        echo "Running what-if deployment for Prod environment..."
+        if [ "${{ needs.detect-deployment-needs.outputs.needs-deployment }}" == "true" ]; then
+          az deployment group what-if \
+            --resource-group ${{ secrets.SENTINEL_RG_PROD }} \
+            --template-file env/deploy-prod.bicep \
+            --parameters env/params/prod.jsonc \
+            --no-pretty-print --only-show-errors
+          echo "✅ What-if deployment completed successfully"
+        else
+          echo "No deployment needed - skipping what-if"
+        fi
     
     - name: Deploy to Prod
       run: |

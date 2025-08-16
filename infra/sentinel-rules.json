@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.37.4.10188",
-      "templateHash": "10696960147691950912"
+      "templateHash": "7392736661845730240"
     }
   },
   "parameters": {
@@ -70,13 +70,13 @@
             "value": "[parameters('rules')[copyIndex()].techniques]"
           },
           "grouping": {
-            "value": "[parameters('rules')[copyIndex()].grouping]"
+            "value": "[coalesce(parameters('rules')[copyIndex()].grouping, createObject())]"
           },
           "entities": {
-            "value": "[parameters('rules')[copyIndex()].entities]"
+            "value": "[coalesce(parameters('rules')[copyIndex()].entities, createObject())]"
           },
           "customDetails": {
-            "value": "[parameters('rules')[copyIndex()].customDetails]"
+            "value": "[coalesce(parameters('rules')[copyIndex()].customDetails, createObject())]"
           }
         },
         "template": {
@@ -86,7 +86,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.37.4.10188",
-              "templateHash": "4002291271565357882"
+              "templateHash": "4033084776913807239"
             }
           },
           "parameters": {
@@ -160,15 +160,14 @@
               "groupByAlertDetails": [],
               "groupByCustomDetails": []
             },
-            "groupingEffective": "[union(variables('groupingDefaults'), parameters('grouping'))]",
+            "g": "[union(variables('groupingDefaults'), parameters('grouping'))]",
             "entitiesDefaults": {
               "accountFullName": null,
               "hostName": null,
               "ipAddress": null
             },
-            "entitiesEffective": "[union(variables('entitiesDefaults'), parameters('entities'))]",
-            "customDetailsDefaults": {},
-            "customDetailsEffective": "[union(variables('customDetailsDefaults'), parameters('customDetails'))]",
+            "e": "[union(variables('entitiesDefaults'), parameters('entities'))]",
+            "cd": "[parameters('customDetails')]",
             "ruleId": "[guid(deployment().name, parameters('name'))]"
           },
           "resources": [
@@ -195,20 +194,20 @@
                 "incidentConfiguration": {
                   "createIncident": "[parameters('createIncident')]",
                   "groupingConfiguration": {
-                    "enabled": "[variables('groupingEffective').enabled]",
-                    "matchingMethod": "[variables('groupingEffective').matchingMethod]",
-                    "lookbackDuration": "[variables('groupingEffective').lookbackDuration]",
-                    "reopenClosedIncident": "[variables('groupingEffective').reopenClosedIncident]",
-                    "groupByEntities": "[variables('groupingEffective').groupByEntities]",
-                    "groupByAlertDetails": "[variables('groupingEffective').groupByAlertDetails]",
-                    "groupByCustomDetails": "[variables('groupingEffective').groupByCustomDetails]"
+                    "enabled": "[variables('g').enabled]",
+                    "matchingMethod": "[variables('g').matchingMethod]",
+                    "lookbackDuration": "[variables('g').lookbackDuration]",
+                    "reopenClosedIncident": "[variables('g').reopenClosedIncident]",
+                    "groupByEntities": "[variables('g').groupByEntities]",
+                    "groupByAlertDetails": "[variables('g').groupByAlertDetails]",
+                    "groupByCustomDetails": "[variables('g').groupByCustomDetails]"
                   }
                 },
-                "entityMappings": "[if(greater(length(parameters('entities')), 0), flatten(createArray(if(not(equals(variables('entitiesEffective').accountFullName, null())), createArray(createObject('entityType', 'Account', 'fieldMappings', createArray(createObject('identifier', 'FullName', 'columnName', string(variables('entitiesEffective').accountFullName))))), createArray()), if(not(equals(variables('entitiesEffective').hostName, null())), createArray(createObject('entityType', 'Host', 'fieldMappings', createArray(createObject('identifier', 'HostName', 'columnName', string(variables('entitiesEffective').hostName))))), createArray()), if(not(equals(variables('entitiesEffective').ipAddress, null())), createArray(createObject('entityType', 'IP', 'fieldMappings', createArray(createObject('identifier', 'Address', 'columnName', string(variables('entitiesEffective').ipAddress))))), createArray()))), createArray())]",
+                "entityMappings": "[if(greater(length(parameters('entities')), 0), flatten(createArray(if(not(equals(variables('e').accountFullName, null())), createArray(createObject('entityType', 'Account', 'fieldMappings', createArray(createObject('identifier', 'FullName', 'columnName', string(variables('e').accountFullName))))), createArray()), if(not(equals(variables('e').hostName, null())), createArray(createObject('entityType', 'Host', 'fieldMappings', createArray(createObject('identifier', 'HostName', 'columnName', string(variables('e').hostName))))), createArray()), if(not(equals(variables('e').ipAddress, null())), createArray(createObject('entityType', 'IP', 'fieldMappings', createArray(createObject('identifier', 'Address', 'columnName', string(variables('e').ipAddress))))), createArray()))), createArray())]",
                 "alertDetailsOverride": {
                   "alertDisplayNameFormat": "[parameters('displayName')]"
                 },
-                "customDetails": "[variables('customDetailsEffective')]"
+                "customDetails": "[variables('cd')]"
               }
             }
           ],

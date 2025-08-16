@@ -28,9 +28,9 @@ module scheduled 'modules/scheduledRule.bicep' = [for r in rules: {
     techniques:    r.techniques
 
     // advanced
-    grouping:      r.grouping
-    entities:      r.entities
-    customDetails: r.customDetails
+    grouping:      r.grouping ?? {}
+    entities:      r.entities ?? {}
+    customDetails: r.customDetails ?? {}
   }
 }]
 

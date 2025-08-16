@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.37.4.10188",
-      "templateHash": "13254311794353908603"
+      "templateHash": "4033084776913807239"
     }
   },
   "parameters": {
@@ -112,7 +112,15 @@
         "suppressionDuration": "PT5M",
         "incidentConfiguration": {
           "createIncident": "[parameters('createIncident')]",
-          "groupingConfiguration": "[if(equals(variables('g').matchingMethod, 'Selected'), createObject('enabled', variables('g').enabled, 'matchingMethod', 'Selected', 'lookbackDuration', variables('g').lookbackDuration, 'reopenClosedIncident', variables('g').reopenClosedIncident, 'groupByEntities', variables('g').groupByEntities, 'groupByAlertDetails', variables('g').groupByAlertDetails, 'groupByCustomDetails', variables('g').groupByCustomDetails), createObject('enabled', variables('g').enabled, 'matchingMethod', 'AllEntities'))]"
+          "groupingConfiguration": {
+            "enabled": "[variables('g').enabled]",
+            "matchingMethod": "[variables('g').matchingMethod]",
+            "lookbackDuration": "[variables('g').lookbackDuration]",
+            "reopenClosedIncident": "[variables('g').reopenClosedIncident]",
+            "groupByEntities": "[variables('g').groupByEntities]",
+            "groupByAlertDetails": "[variables('g').groupByAlertDetails]",
+            "groupByCustomDetails": "[variables('g').groupByCustomDetails]"
+          }
         },
         "entityMappings": "[if(greater(length(parameters('entities')), 0), flatten(createArray(if(not(equals(variables('e').accountFullName, null())), createArray(createObject('entityType', 'Account', 'fieldMappings', createArray(createObject('identifier', 'FullName', 'columnName', string(variables('e').accountFullName))))), createArray()), if(not(equals(variables('e').hostName, null())), createArray(createObject('entityType', 'Host', 'fieldMappings', createArray(createObject('identifier', 'HostName', 'columnName', string(variables('e').hostName))))), createArray()), if(not(equals(variables('e').ipAddress, null())), createArray(createObject('entityType', 'IP', 'fieldMappings', createArray(createObject('identifier', 'Address', 'columnName', string(variables('e').ipAddress))))), createArray()))), createArray())]",
         "alertDetailsOverride": {

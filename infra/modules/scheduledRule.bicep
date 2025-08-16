@@ -74,20 +74,15 @@ resource rule 'Microsoft.SecurityInsights/alertRules@2025-06-01' = {
 
     incidentConfiguration: {
       createIncident: createIncident
-      groupingConfiguration: g.matchingMethod == 'Selected'
-        ? {
-            enabled: g.enabled
-            matchingMethod: 'Selected'
-            lookbackDuration: g.lookbackDuration
-            reopenClosedIncident: g.reopenClosedIncident
-            groupByEntities: g.groupByEntities
-            groupByAlertDetails: g.groupByAlertDetails
-            groupByCustomDetails: g.groupByCustomDetails
-          }
-        : {
-            enabled: g.enabled
-            matchingMethod: 'AllEntities'
-          }
+      groupingConfiguration: {
+        enabled: g.enabled
+        matchingMethod: g.matchingMethod
+        lookbackDuration: g.lookbackDuration
+        reopenClosedIncident: g.reopenClosedIncident
+        groupByEntities: g.groupByEntities
+        groupByAlertDetails: g.groupByAlertDetails
+        groupByCustomDetails: g.groupByCustomDetails
+      }
     }
 
     // Entities: only include non-null mappings
