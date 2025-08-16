@@ -15,6 +15,11 @@ on:
           - dev
           - prod
 
+permissions:
+  id-token: write
+  contents: write
+  pull-requests: write
+
 env:
   AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
   AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
@@ -35,13 +40,15 @@ jobs:
       with:
         dotnet-version: '8.0.x'
     
-    - name: Setup Bicep
-      uses: azure/setup-bicep@v1
-    
     - name: Install Azure CLI
       run: |
         curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
         az --version
+    
+    - name: Install Bicep CLI
+      run: |
+        az bicep install
+        az bicep version
     
     - name: Login to Azure
       uses: azure/login@v2
@@ -106,6 +113,7 @@ jobs:
       uses: peter-evans/create-pull-request@v5
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
+        base: main
         branch: ${{ steps.create-branch.outputs.branch_name }}
         title: "fix: drift detection report $(date +%Y-%m-%d)"
         body: |
