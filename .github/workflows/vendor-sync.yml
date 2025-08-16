@@ -17,6 +17,8 @@ on:
 
 permissions:
   id-token: write
+  contents: write
+  pull-requests: write
 
 env:
   AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
@@ -93,13 +95,16 @@ jobs:
         git add rules/vendor/enabled/
         git commit -m "chore: export enabled Sentinel rules $(date +%Y-%m-%d)"
         echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     
     - name: Push branch
       if: steps.check-changes.outputs.changes == 'true'
-      uses: ad-m/github-push-action@master
-      with:
-        github_token: ${{ secrets.GITHUB_TOKEN }}
-        branch: ${{ steps.create-branch.outputs.branch_name }}
+      run: |
+        git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}
+        git push origin ${{ steps.create-branch.outputs.branch_name }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     
     - name: Create Pull Request
       if: steps.check-changes.outputs.changes == 'true'
