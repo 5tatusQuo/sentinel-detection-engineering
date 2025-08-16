@@ -1,9 +1,4 @@
-@description('Upstream lineage (optional)')
-var x_metadata = {
-  upstreamTemplateGuid: ''
-  upstreamTemplateVersion: ''
-  owner: 'Detection Engineering'
-}
+
 
 @description('Name of the Log Analytics workspace')
 param workspaceName string
@@ -61,16 +56,8 @@ param createIncident bool = true
 param groupAlerts bool = true
 
 @description('How should we group alerts?')
-@allowed([
-  'SingleAlert'
-  'GroupByAlertDetails'
-  'GroupByCustomDetails'
-  'GroupByEntities'
-  'AllEntities'
-  'Custom'
-  'None'
-])
-param groupingMethod string = 'GroupByAlertDetails'
+@allowed(['AllEntities', 'Custom', 'None'])
+param groupingMethod string = 'AllEntities'
 
 
 

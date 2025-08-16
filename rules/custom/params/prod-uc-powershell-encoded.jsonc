@@ -41,7 +41,7 @@
       "value": true
     },
     "groupingMethod": {
-      "value": "GroupByAlertDetails"
+      "value": "AllEntities"
     }
   }
 }
