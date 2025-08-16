@@ -4,29 +4,37 @@ param workspaceName string
 @description('List of scheduled analytics rules to deploy')
 param rules array = []
 
-resource la 'Microsoft.OperationalInsights/workspaces@2022-10-01' existing = {
-  name: workspaceName
-}
-
 module scheduled 'modules/scheduledRule.bicep' = [for r in rules: {
   name: 'rule-${uniqueString(r.name)}'
-  scope: la
+  scope: resourceGroup()
   params: {
     // required
-    name:        r.name
-    displayName: r.displayName
-    kql:         r.kql
-    severity:    r.severity
-    enabled:     bool(r.enabled)
-    frequency:   r.frequency
-    period:      r.period
-    tactics:     r.tactics
-    techniques:  r.techniques
-    createIncident: bool(r.createIncident)
+    name:          r.name
+    displayName:   r.displayName
+    kql:           r.kql
+    workspaceName: workspaceName
 
-    // optional
-    grouping:      contains(r,'grouping')      ? r.grouping      : {}
-    entities:      contains(r,'entities')      ? r.entities      : []
-    customDetails: contains(r,'customDetails') ? r.customDetails : {}
+    // common optional (defaults set in module)
+    severity:      r.severity
+    enabled:       (r.enabled == null) ? true : bool(r.enabled)
+    frequency:     r.frequency
+    period:        r.period
+    createIncident:r.createIncident
+
+    // ATT&CK
+    tactics:       r.tactics
+    techniques:    r.techniques
+
+    // advanced
+    grouping:      r.grouping ?? {}
+    entities:      r.entities ?? {}
+    customDetails: r.customDetails ?? {}
   }
+}]
+
+// Outputs for monitoring
+output deployedRules array = [for r in rules: {
+  name: r.name
+  displayName: r.displayName
+  enabled: r.enabled ?? true
 }]
