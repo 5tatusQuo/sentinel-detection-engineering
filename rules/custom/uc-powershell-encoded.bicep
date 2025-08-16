@@ -96,7 +96,7 @@ resource sentinelRule 'Microsoft.SecurityInsights/alertRules@2025-06-01' = {
     tactics: attackTactics
     techniques: attackTechniques
     suppressionEnabled: false
-    suppressionDuration: 'PT0H'
+    suppressionDuration: 'PT5M'
     incidentConfiguration: {
       createIncident: createIncident
       groupingConfiguration: {
