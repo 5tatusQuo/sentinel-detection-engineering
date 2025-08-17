@@ -320,7 +320,7 @@ jobs:
         echo "Deploying to Production environment..."
         if [ "${{ needs.detect-deployment-needs.outputs.needs-deployment }}" == "true" ]; then
           az deployment group create \
-            --resource-group ${{ secrets.SENTINEL_RG_PROD }} \
+            --resource-group ${{ secrets.SENTINEL_WS_PROD }} \
             --template-file env/deploy-prod.bicep \
             --parameters env/params/prod.jsonc \
             --verbose
@@ -334,8 +334,8 @@ jobs:
         echo "Verifying Production deployment..."
         # List deployed rules
         az sentinel alert-rule list \
-          --resource-group ${{ secrets.SENTINEL_RG_PROD }} \
-          --workspace-name ${{ secrets.SENTINEL_WS_PROD }} \
+          --resource-group ${{ secrets.SENTINEL_WS_PROD }} \
+          --workspace-name ${{ secrets.SENTINEL_RG_PROD }} \
           --query '[].{Name: displayName, Enabled: enabled, Severity: severity}' \
           --output table
     
