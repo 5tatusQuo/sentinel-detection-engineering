@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.37.4.10188",
-      "templateHash": "3430207479961169636"
+      "templateHash": "3216068838976974741"
     }
   },
   "parameters": {
@@ -24,6 +24,7 @@
     "kqltest1": "SecurityEvent| where EventID == 4624| where LogonType == 3| where TimeGenerated > ago(1h)| project TimeGenerated, Computer, SubjectUserName, IpAddress, LogonType\n",
     "kqltest2": "SecurityEvent| where EventID == 4624| where LogonType == 3| where TimeGenerated > ago(1h)| project TimeGenerated, Computer, SubjectUserName, IpAddress, LogonType\n",
     "kqltest4": "SecurityEvent| where EventID == 4624| where LogonType == 3| where TimeGenerated > ago(1h)| project TimeGenerated, Computer, SubjectUserName, IpAddress, LogonType\n",
+    "kqltest5": "SecurityEvent| where EventID == 4624| where LogonType == 3| where TimeGenerated > ago(1h)| project TimeGenerated, Computer, SubjectUserName, IpAddress, LogonType\n",
     "rules": [
       {
         "name": "uc-powershell-encoded",
@@ -164,6 +165,34 @@
         "name": "test4",
         "displayName": "[PROD] [ORG] – Test4",
         "kql": "[variables('kqltest4')]",
+        "severity": "Medium",
+        "enabled": true,
+        "frequency": "PT1H",
+        "period": "PT1H",
+        "tactics": [
+          "InitialAccess"
+        ],
+        "techniques": [
+          "T1078"
+        ],
+        "createIncident": true,
+        "grouping": {
+          "enabled": true,
+          "matchingMethod": "AllEntities"
+        },
+        "entities": {
+          "ipAddress": "IpAddress",
+          "hostName": "Computer",
+          "accountFullName": "SubjectUserName"
+        },
+        "customDetails": {
+          "LogonType": "LogonType"
+        }
+      },
+      {
+        "name": "test5",
+        "displayName": "[PROD] [ORG] – Test5",
+        "kql": "[variables('kqltest5')]",
         "severity": "Medium",
         "enabled": true,
         "frequency": "PT1H",
