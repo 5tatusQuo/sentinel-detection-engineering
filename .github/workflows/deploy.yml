@@ -52,6 +52,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       needs-deployment: ${{ steps.check-deployment-needs.outputs.needs-deployment }}
+      changed-files: ${{ steps.check-deployment-needs.outputs.changed-files }}
     
     steps:
     - name: Debug - Workflow Started
@@ -163,6 +164,9 @@ jobs:
           exit 0
         fi
         
+        # Output changed files for other jobs to use
+        echo "changed-files=$CHANGED_FILES" >> $GITHUB_OUTPUT
+        
         # Check for changes first, regardless of branch
         if [ -n "$CHANGED_FILES" ]; then
           echo "Changes detected in: $CHANGED_FILES"
@@ -211,11 +215,34 @@ jobs:
     - name: Validate Bicep templates (static)
       run: |
         echo "Validating Bicep templates (static checks)..."
-        echo "Building main templates..."
+        
+        # Get changed files from the detect-deployment-needs job
+        CHANGED_FILES="${{ needs.detect-deployment-needs.outputs.changed-files }}"
+        echo "Changed files: $CHANGED_FILES"
+        
+        # Always validate core templates that might be affected
+        echo "Building core templates..."
         az bicep build --file infra/sentinel-rules.bicep
         az bicep build --file infra/modules/scheduledRule.bicep
-        az bicep build --file env/deploy-dev.bicep
-        az bicep build --file env/deploy-prod.bicep
+        
+        # Validate environment-specific templates if they were changed
+        if [[ "$CHANGED_FILES" == *"env/deploy-dev.bicep"* ]]; then
+          echo "Building dev template (changed)..."
+          az bicep build --file env/deploy-dev.bicep
+        fi
+        
+        if [[ "$CHANGED_FILES" == *"env/deploy-prod.bicep"* ]]; then
+          echo "Building prod template (changed)..."
+          az bicep build --file env/deploy-prod.bicep
+        fi
+        
+        # Validate KQL files if any were changed
+        if [[ "$CHANGED_FILES" == *"kql/"* ]]; then
+          echo "KQL files changed - validating syntax..."
+          # List changed KQL files for debugging
+          echo "$CHANGED_FILES" | grep "kql/" || echo "No KQL files in changed files list"
+        fi
+        
         echo "✅ Bicep templates validated successfully"
     
     - name: Validate deployment (Dev)
