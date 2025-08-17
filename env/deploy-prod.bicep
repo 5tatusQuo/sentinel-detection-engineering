@@ -8,6 +8,7 @@ var kqlLogin = loadTextContent('../kql/suspicious-login-attempts.kql')
 var kqlAdmin = loadTextContent('../kql/admin-account-anomaly.kql')
 var kqltest1 = loadTextContent('../kql/test1.kql')
 var kqltest2 = loadTextContent('../kql/test2.kql')
+var kqltest3 = loadTextContent('../kql/test3.kql')
 
 // Define rules for prod environment (higher thresholds, create incidents)
 var rules = [
@@ -118,6 +119,30 @@ var rules = [
       ipAddress: 'IpAddress'
       accountFullName: 'SubjectUserName'
       hostName: 'Computer'
+    }
+    customDetails: {
+      LogonType: 'LogonType'
+    }
+  }
+  {
+    name: 'test3'
+    displayName: '[PROD] [ORG] – Test3'
+    kql: kqltest3
+    severity: 'Medium'
+    enabled: true
+    frequency: 'PT1H'
+    period: 'PT1H'
+    tactics: [ 'InitialAccess' ]
+    techniques: [ 'T1078' ]
+    createIncident: true
+    grouping: {
+      enabled: true
+      matchingMethod: 'AllEntities'
+    }
+    entities: {
+      accountFullName: 'SubjectUserName'
+      hostName: 'Computer'
+      ipAddress: 'IpAddress'
     }
     customDetails: {
       LogonType: 'LogonType'
