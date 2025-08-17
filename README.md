@@ -1,158 +1,177 @@
-# Microsoft Sentinel Detection Engineering Repository
+# 🛡️ Sentinel Detection Engineering
 
-Welcome! This repository helps you manage Microsoft Sentinel detection rules using Infrastructure as Code (IaC). It's designed to be beginner-friendly while providing enterprise-grade automation.
+A beginner-friendly, automated system for creating and deploying Microsoft Sentinel detection rules using Infrastructure as Code (Bicep) and GitOps practices.
 
-## 🎯 What This Repository Does
+## 🎯 Quick Start
 
-This repository automates the deployment and management of Microsoft Sentinel detection rules. Think of it as a "recipe book" for security detection that:
+### 🚀 Create a New Detection Rule (Recommended)
 
-- **Automatically deploys** detection rules to your Sentinel workspaces
-- **Tracks changes** in Git so you can see what was deployed when
-- **Prevents mistakes** with validation and testing
-- **Makes it easy** to add new detection rules
+1. **Go to Actions** → **Create Rule Pull Request** → **Run workflow**
+2. **Fill in the form**:
+   - Rule name (e.g., `suspicious-login-attempts`)
+   - Display name (e.g., `Suspicious Login Attempts`)
+   - Severity (Low/Medium/High/Critical)
+   - MITRE ATT&CK tactics and techniques
+   - Your KQL query
+3. **Submit** - This will:
+   - Create a feature branch
+   - Generate the KQL file
+   - Add rule configurations to both dev and prod
+   - Create a pull request
+   - Deploy to dev environment for testing
 
-## 🚀 Quick Start for Beginners
+### 🔍 Review and Validate
 
-### Your First Detection Rule
+1. **Review the PR** - Check the KQL logic and configuration
+2. **Test in dev** - The rule is automatically deployed to dev environment
+3. **Validate alerts** - Check that the rule generates appropriate alerts
+4. **Approve and merge** - Once validated, merge the PR
 
-Want to add a new security detection? Here's how:
+### 🚀 Production Deployment
 
-1. **Create a KQL query** in the `kql/` folder
-2. **Add it to the rules list** in `env/deploy-dev.bicep` 
-3. **Test it locally** (see below)
-4. **Create a Pull Request** - it will automatically deploy to Dev!
+- **Automatic** - When the PR is merged to main, the rule automatically deploys to production
+- **Safe** - Production deployment requires approval through GitHub environments
 
-### Local Testing (Before You Deploy)
+## 🏗️ Architecture
+
+### GitOps Workflow
+
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Create Rule   │───▶│  Feature Branch │───▶│  Pull Request   │
+│   (GitHub UI)   │    │   (Auto-gen)    │    │   (Auto-created)│
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+                                                       │
+                                                       ▼
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Production    │◀───│   Merge to Main │◀───│  Validate in Dev│
+│   Deployment    │    │   (Manual)      │    │   (Auto-deploy) │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+```
+
+### File Structure
+
+```
+├── .github/workflows/
+│   ├── deploy.yml              # Main deployment workflow
+│   └── create-rule-pr.yml      # Rule creation workflow
+├── env/
+│   ├── deploy-dev.bicep        # Dev environment rules
+│   ├── deploy-prod.bicep       # Prod environment rules
+│   └── params/
+│       ├── dev.jsonc           # Dev parameters
+│       └── prod.jsonc          # Prod parameters
+├── infra/
+│   ├── sentinel-rules.bicep    # Root orchestrator
+│   └── modules/
+│       └── scheduledRule.bicep # Reusable rule module
+├── kql/                        # KQL query files
+│   ├── suspicious-login-attempts.kql
+│   ├── admin-account-anomaly.kql
+│   └── uc-powershell-encoded.kql
+└── scripts/
+    ├── generate-rule-config.ps1 # Rule generation script
+    ├── new-rule.ps1            # Interactive rule creator
+    └── validate-kql-columns.ps1 # KQL validation
+```
+
+## 🔧 How It Works
+
+### 1. Rule Creation
+- **GitHub Actions UI** - Fill out a form with rule details
+- **Automated Analysis** - Script analyzes KQL to detect entity mappings and custom details
+- **Branch Creation** - Creates a feature branch with all changes
+- **Pull Request** - Automatically creates a PR for review
+
+### 2. Development Testing
+- **Auto-deploy to Dev** - Rule deploys to dev environment immediately
+- **Validation** - Engineer tests the rule in Sentinel dev environment
+- **Review Process** - Team reviews KQL logic and configuration
+
+### 3. Production Deployment
+- **Manual Approval** - Engineer approves and merges the PR
+- **Auto-deploy to Prod** - Rule automatically deploys to production
+- **Environment Protection** - Production deployment requires approval
+
+## 🛠️ Advanced Usage
+
+### Manual Rule Creation
+
+If you prefer to create rules manually:
 
 ```bash
-# Test that your Bicep files are valid
-az bicep build --file env/deploy-dev.bicep
+# Create KQL file
+echo "your KQL query" > kql/my-rule.kql
 
-# See what would be deployed (without actually deploying)
-az deployment group what-if \
-  --resource-group your-dev-resource-group \
-  --template-file env/deploy-dev.bicep \
-  --parameters env/params/dev.jsonc
+# Generate configuration
+pwsh scripts/generate-rule-config.ps1 \
+  -KqlFile "kql/my-rule.kql" \
+  -RuleName "my-rule" \
+  -Severity "Medium" \
+  -Environment "dev" \
+  -Tactics "InitialAccess" \
+  -Techniques "T1078"
+
+# The script automatically adds the code to Bicep files
 ```
 
-## 📁 Repository Structure (What's What)
+### Interactive Rule Creation
 
-```
-.
-├─ env/                              # Environment-specific files
-│  ├─ deploy-dev.bicep               # Dev environment rules
-│  ├─ deploy-prod.bicep              # Prod environment rules  
-│  └─ params/                        # Simple configuration files
-│     ├─ dev.jsonc                   # Dev workspace settings
-│     └─ prod.jsonc                  # Prod workspace settings
-├─ infra/                            # Reusable building blocks
-│  ├─ sentinel-rules.bicep           # Main deployment template
-│  └─ modules/                       # Reusable components
-│     └─ scheduledRule.bicep         # Template for one detection rule
-├─ kql/                              # Your detection queries
-│  ├─ uc-powershell-encoded.kql      # Example: PowerShell detection
-│  ├─ suspicious-login-attempts.kql  # Example: Login attempts
-│  └─ admin-account-anomaly.kql      # Example: Admin account detection
-├─ rules/vendor/                     # Vendor rule management
-│  ├─ enabled/                       # Rules from Microsoft/partners
-│  └─ references/                    # Reference templates
-├─ scripts/                          # Helper scripts
-├─ .github/workflows/                # Automation pipelines
-└─ docs/                            # Detailed documentation
+```bash
+# Run interactive creator
+pwsh scripts/new-rule.ps1
 ```
 
-## 🔧 Setup Required
+## 🔍 Validation and Testing
 
-### 1. GitHub Repository Secrets
+### KQL Validation
+- **Syntax Check** - Bicep validates KQL syntax during build
+- **Column Analysis** - Scripts detect entity mappings and custom details
+- **Query Testing** - Test queries in Azure Sentinel Logs
 
-You need to tell GitHub how to connect to your Azure environment. Add these secrets in your GitHub repository settings:
+### Deployment Validation
+- **Bicep Build** - Templates are validated before deployment
+- **What-if Analysis** - Preview changes before applying
+- **Azure Validation** - ARM template validation against Azure
 
-**Azure Connection:**
-- `AZURE_TENANT_ID`: Your Azure tenant ID
-- `AZURE_SUBSCRIPTION_ID`: Your Azure subscription ID  
-- `AZURE_CLIENT_ID`: OIDC application client ID
-
-**Sentinel Workspaces:**
-- `SENTINEL_RG_DEV`: Resource group name for Dev workspace
-- `SENTINEL_WS_DEV`: Workspace name for Dev environment
-- `SENTINEL_RG_PROD`: Resource group name for Prod workspace
-- `SENTINEL_WS_PROD`: Workspace name for Prod environment
-
-### 2. Azure Resources
-
-You'll need these Azure resources set up:
-- **Log Analytics Workspaces** (with Sentinel enabled)
-- **Resource Groups** for Dev and Prod
-- **OIDC Application** for GitHub → Azure authentication
-
-## 🔄 How the Automation Works
-
-### Nightly Export (`vendor-sync.yml`)
-- **What it does**: Downloads the latest vendor rules from your Sentinel workspaces
-- **When**: Runs every day at 2 AM UTC
-- **Why**: Keeps track of what vendor rules you have enabled
-
-### Deployment (`deploy.yml`)
-- **Dev**: Automatically deploys when you merge to main
-- **Prod**: Requires manual approval (safety first!)
-- **Includes**: Validation, testing, and verification
-
-### Drift Detection (`drift-check.yml`)
-- **What it does**: Compares what's in your code vs what's actually deployed
-- **When**: Runs weekly on Sundays
-- **Why**: Catches if someone manually changed something in Sentinel
-
-## 📚 Documentation
-
-- **[Pipeline Overview](docs/pipeline-summary.md)** - How the deployment pipeline works
-- **[Naming and Metadata](docs/naming-and-metadata.md)** - How to name your rules and add metadata
-- **[Approvals Process](docs/approvals.md)** - How to set up approval gates
-- **[Creating Your First Rule](docs/creating-your-first-rule.md)** - Step-by-step guide for beginners
-
-## 📋 Best Practices
-
-### Rule Naming
-Use this format: `[ORG] – <What You're Detecting> (T####[#.###])`
-- Example: `[ORG] – Suspicious PowerShell (EncodedCommand) (T1059.001)`
-
-### Metadata
-- **ATT&CK mapping**: Include relevant tactics and techniques
-- **Owner**: Set to 'Detection Engineering'
-- **Data sources**: Document what logs you're querying
-
-### Before You Submit
-- [ ] ATT&CK techniques mapped
-- [ ] Data sources verified
-- [ ] Query syntax reviewed
-- [ ] Incident configuration reviewed
-- [ ] Dev environment tests attached
-
-## 🆘 Need Help?
+## 🚨 Troubleshooting
 
 ### Common Issues
-- **Deployment fails**: Check the GitHub Actions logs for error details
-- **Rule not working**: Verify your KQL query in Sentinel Logs
-- **Validation errors**: Run `az bicep build` locally first
 
-### Getting Support
-- Create an issue in this repository
-- Contact the Detection Engineering team
-- Review the documentation in the `docs/` folder
+1. **KQL Syntax Errors**
+   - Check the query in Azure Sentinel Logs
+   - Validate regex patterns and functions
 
-## 🔄 Rollback (If Something Goes Wrong)
+2. **Deployment Failures**
+   - Check Bicep build output
+   - Verify Azure permissions
+   - Review what-if analysis
 
-To undo a deployment:
-1. Revert the problematic Pull Request
-2. Create a new PR with the reverted changes
-3. The pipeline will redeploy the previous working state
+3. **Missing Rules**
+   - Check if rules exist in Sentinel
+   - Verify Bicep configuration
+   - Check deployment logs
 
-## 🎓 Learning Resources
+### Getting Help
 
-- **[Microsoft Sentinel Documentation](https://docs.microsoft.com/en-us/azure/sentinel/)**
-- **[KQL Query Language](https://docs.microsoft.com/en-us/azure/data-explorer/kusto/query/)**
-- **[Bicep Templates](https://docs.microsoft.com/en-us/azure/azure-resource-manager/bicep/)**
-- **[MITRE ATT&CK Framework](https://attack.mitre.org/)**
+- **Documentation** - Check the `docs/` folder for detailed guides
+- **Scripts** - Use validation scripts in `scripts/` folder
+- **GitHub Issues** - Report problems in the repository
+
+## 📚 Learning Resources
+
+- [Microsoft Sentinel Documentation](https://docs.microsoft.com/en-us/azure/sentinel/)
+- [KQL Quick Reference](https://docs.microsoft.com/en-us/azure/data-explorer/kql-quick-reference)
+- [Bicep Documentation](https://docs.microsoft.com/en-us/azure/azure-resource-manager/bicep/)
+- [MITRE ATT&CK Framework](https://attack.mitre.org/)
+
+## 🤝 Contributing
+
+1. **Create a feature branch** for your changes
+2. **Follow the GitOps workflow** - create PR, test in dev, merge to main
+3. **Update documentation** for any new features
+4. **Test thoroughly** before merging
 
 ---
 
-**Happy detecting! 🕵️‍♂️**
+**🎯 Goal**: Make detection engineering accessible to beginners while maintaining enterprise-grade security practices through automation and GitOps.

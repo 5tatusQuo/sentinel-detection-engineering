@@ -15,6 +15,7 @@ on:
       - 'infra/**'
       - 'kql/**'
       - '.github/workflows/deploy.yml'
+    types: [ opened, synchronize, reopened ]
   workflow_dispatch:
     inputs:
       environment:
@@ -214,7 +215,10 @@ jobs:
   deploy-dev:
     needs: [detect-deployment-needs, build-validate]
     runs-on: ubuntu-latest
-    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.environment == 'dev')
+    if: |
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') || 
+      (github.event_name == 'pull_request') || 
+      (github.event_name == 'workflow_dispatch' && inputs.environment == 'dev')
     
     steps:
     - name: Checkout repository

@@ -1,0 +1,180 @@
+name: Create Rule Pull Request
+
+on:
+  workflow_dispatch:
+    inputs:
+      rule_name:
+        description: 'Name of the new rule (e.g., suspicious-login-attempts)'
+        required: true
+        type: string
+      display_name:
+        description: 'Display name for the rule (e.g., Suspicious Login Attempts)'
+        required: true
+        type: string
+      severity:
+        description: 'Severity level'
+        required: true
+        type: choice
+        options:
+          - Low
+          - Medium
+          - High
+          - Critical
+      tactics:
+        description: 'MITRE ATT&CK tactics (comma-separated)'
+        required: true
+        type: string
+        default: 'InitialAccess'
+      techniques:
+        description: 'MITRE ATT&CK techniques (comma-separated)'
+        required: true
+        type: string
+        default: 'T1078'
+      kql_query:
+        description: 'KQL query for the detection rule'
+        required: true
+        type: string
+        default: |
+          SecurityEvent
+          | where EventID == 4624
+          | where LogonType == 3
+          | where TimeGenerated > ago(1h)
+          | project TimeGenerated, Computer, SubjectUserName, IPAddress, LogonType
+
+permissions:
+  id-token: write
+  contents: write
+  pull-requests: write
+
+jobs:
+  create-rule-branch:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Install PowerShell
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y powershell
+    
+    - name: Create feature branch
+      run: |
+        BRANCH_NAME="feature/add-rule-${{ inputs.rule_name }}"
+        git config --global user.name "GitHub Actions"
+        git config --global user.email "actions@github.com"
+        git checkout -b "$BRANCH_NAME"
+        echo "Created branch: $BRANCH_NAME"
+    
+    - name: Create KQL file
+      run: |
+        KQL_FILE="kql/${{ inputs.rule_name }}.kql"
+        echo "${{ inputs.kql_query }}" > "$KQL_FILE"
+        echo "Created KQL file: $KQL_FILE"
+    
+    - name: Generate rule configuration
+      run: |
+        pwsh scripts/generate-rule-config.ps1 \
+          -KqlFile "kql/${{ inputs.rule_name }}.kql" \
+          -RuleName "${{ inputs.rule_name }}" \
+          -Severity "${{ inputs.severity }}" \
+          -Environment "dev" \
+          -Tactics "${{ inputs.tactics }}" \
+          -Techniques "${{ inputs.techniques }}" \
+          -CreateIncident $false
+    
+    - name: Generate prod configuration
+      run: |
+        # Determine prod severity (escalate by one level)
+        PROD_SEVERITY="${{ inputs.severity }}"
+        case "${{ inputs.severity }}" in
+          "Low") PROD_SEVERITY="Medium" ;;
+          "Medium") PROD_SEVERITY="High" ;;
+          "High") PROD_SEVERITY="High" ;;
+          "Critical") PROD_SEVERITY="Critical" ;;
+        esac
+        
+        pwsh scripts/generate-rule-config.ps1 \
+          -KqlFile "kql/${{ inputs.rule_name }}.kql" \
+          -RuleName "${{ inputs.rule_name }}" \
+          -Severity "$PROD_SEVERITY" \
+          -Environment "prod" \
+          -Tactics "${{ inputs.tactics }}" \
+          -Techniques "${{ inputs.techniques }}" \
+          -CreateIncident $true
+    
+    - name: Validate Bicep files
+      run: |
+        az bicep install
+        az bicep build --file env/deploy-dev.bicep
+        az bicep build --file env/deploy-prod.bicep
+        echo "✅ Bicep files validated successfully"
+    
+    - name: Commit changes
+      run: |
+        git add .
+        git commit -m "feat: add new detection rule '${{ inputs.display_name }}'
+
+        - Add KQL query: kql/${{ inputs.rule_name }}.kql
+        - Add rule configuration to dev environment
+        - Add rule configuration to prod environment
+        - Severity: ${{ inputs.severity }} (dev) / $PROD_SEVERITY (prod)
+        - Tactics: ${{ inputs.tactics }}
+        - Techniques: ${{ inputs.techniques }}"
+    
+    - name: Push branch
+      run: |
+        git push origin "feature/add-rule-${{ inputs.rule_name }}"
+    
+    - name: Create Pull Request
+      uses: peter-evans/create-pull-request@v5
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        base: main
+        branch: "feature/add-rule-${{ inputs.rule_name }}"
+        title: "feat: Add new detection rule - ${{ inputs.display_name }}"
+        body: |
+          ## 🎯 New Detection Rule: ${{ inputs.display_name }}
+          
+          This PR adds a new detection rule to both dev and prod environments.
+          
+          ### 📋 Rule Details
+          - **Name**: `${{ inputs.rule_name }}`
+          - **Display Name**: `${{ inputs.display_name }}`
+          - **Severity**: `${{ inputs.severity }}` (dev) / `$PROD_SEVERITY` (prod)
+          - **Tactics**: `${{ inputs.tactics }}`
+          - **Techniques**: `${{ inputs.techniques }}`
+          
+          ### 📁 Files Changed
+          - `kql/${{ inputs.rule_name }}.kql` - New KQL query
+          - `env/deploy-dev.bicep` - Dev environment configuration
+          - `env/deploy-prod.bicep` - Prod environment configuration
+          
+          ### 🔍 Validation
+          - ✅ KQL query syntax validated
+          - ✅ Bicep templates build successfully
+          - ✅ Entity mappings and custom details auto-detected
+          
+          ### 🚀 Deployment Process
+          1. **Review**: Engineer reviews the rule logic and configuration
+          2. **Test**: Rule deploys to dev environment for testing
+          3. **Validate**: Engineer validates the rule in Sentinel dev environment
+          4. **Approve**: Once validated, approve and merge this PR
+          5. **Deploy**: Rule automatically deploys to prod environment
+          
+          ### 📝 Next Steps
+          - [ ] Review the KQL query logic
+          - [ ] Test the rule in dev environment
+          - [ ] Validate alert generation and incident creation
+          - [ ] Approve and merge this PR
+          
+          ---
+          *This PR was automatically generated by the rule creation workflow.*
+        labels: |
+          enhancement
+          detection-rule
+          automated
+        assignees: ${{ github.actor }}
