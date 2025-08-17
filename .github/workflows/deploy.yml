@@ -163,11 +163,8 @@ jobs:
           exit 0
         fi
         
-        # For main branch pushes, always deploy to ensure changes are applied
-        if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
-          echo "Main branch push detected - will deploy to both dev and prod"
-          echo "needs-deployment=true" >> $GITHUB_OUTPUT
-        elif [ -n "$CHANGED_FILES" ]; then
+        # Check for changes first, regardless of branch
+        if [ -n "$CHANGED_FILES" ]; then
           echo "Changes detected in: $CHANGED_FILES"
           echo "needs-deployment=true" >> $GITHUB_OUTPUT
         else
