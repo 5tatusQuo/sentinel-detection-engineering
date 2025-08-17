@@ -7,6 +7,7 @@ var kqlEncoded = loadTextContent('../kql/uc-powershell-encoded.kql')
 var kqlLogin = loadTextContent('../kql/suspicious-login-attempts.kql')
 var kqlAdmin = loadTextContent('../kql/admin-account-anomaly.kql')
 var kqltest1 = loadTextContent('../kql/test1.kql')
+var kqltest2 = loadTextContent('../kql/test2.kql')
 
 // Define rules for dev environment
 var rules = [
@@ -93,6 +94,30 @@ var rules = [
       hostName: 'Computer'
       accountFullName: 'SubjectUserName'
       ipAddress: 'IpAddress'
+    }
+    customDetails: {
+      LogonType: 'LogonType'
+    }
+  }
+  {
+    name: 'test2'
+    displayName: '[DEV] [ORG] – Test2'
+    kql: kqltest2
+    severity: 'Low'
+    enabled: true
+    frequency: 'PT1H'
+    period: 'PT1H'
+    tactics: [ 'InitialAccess' ]
+    techniques: [ 'T1078' ]
+    createIncident: true
+    grouping: {
+      enabled: true
+      matchingMethod: 'AllEntities'
+    }
+    entities: {
+      ipAddress: 'IpAddress'
+      hostName: 'Computer'
+      accountFullName: 'SubjectUserName'
     }
     customDetails: {
       LogonType: 'LogonType'
