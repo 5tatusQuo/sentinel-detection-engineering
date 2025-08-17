@@ -8,6 +8,7 @@ on:
       - 'infra/**'
       - 'kql/**'
     types: [ opened, synchronize, reopened ]
+  workflow_dispatch:
 
 jobs:
   test:
