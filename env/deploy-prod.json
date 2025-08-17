@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.37.4.10188",
-      "templateHash": "885123858064383571"
+      "templateHash": "8192481317710857624"
     }
   },
   "parameters": {
@@ -21,7 +21,6 @@
     "kqlEncoded": "SecurityEvent\n| where EventID == 4688\n| where (NewProcessName has_cs \"powershell.exe\" or Process has_cs \"powershell.exe\")\n| where CommandLine has_any (\" -enc\", \"-EncodedCommand\")\n| extend EncArg = extract(@\"(?i)-enc(?:odedCommand)?\\s+(['\"\"])?([A-Za-z0-9+/=]+)\\1\", 2, CommandLine)\n| where isnotempty(EncArg)\n| project TimeGenerated, Computer, SubjectUserName, CommandLine, EncArg\n",
     "kqlLogin": "SigninLogs\n| where TimeGenerated > ago(1h)\n| where ResultType != 0\n| summarize FailedCount = count(), Applications = make_set(AppDisplayName), Locations = make_set(Location), TimeSpan = max(TimeGenerated) - min(TimeGenerated) by IPAddress, bin(TimeGenerated, 5m)\n| where FailedCount >= 5\n| where TimeSpan < 30m\n| take 100\n",
     "kqlAdmin": "SigninLogs\n| where TimeGenerated > ago(1h)\n| where ResultType == 0\n| where UserPrincipalName has \"@\"\n| where AppDisplayName in~ (\"Microsoft Azure PowerShell\", \"Microsoft Azure CLI\", \"Azure Portal\")\n| summarize LoginCount = count(), Applications = make_set(AppDisplayName), IPAddresses = make_set(IPAddress), Locations = make_set(Location), TimeSpan = max(TimeGenerated) - min(TimeGenerated) by UserPrincipalName, bin(TimeGenerated, 5m)\n| where LoginCount >= 2\n| where TimeSpan < 30m\n| take 100\n",
-    "kqltestautomatedrule": "SecurityEvent\n| where EventID == 4624\n| where LogonType == 3\n| where TimeGenerated > ago(1h)\n| extend SourceIP = case(\n    IpAddress matches regex @\"::ffff:(\\d+\\.\\d+\\.\\d+\\.\\d+)\", extract(@\"::ffff:(\\d+\\.\\d+\\.\\d+\\.\\d+)\", 1, IpAddress),\n    IpAddress matches regex @\"\\d+\\.\\d+\\.\\d+\\.\\d+\", IpAddress,\n    IpAddress\n)\n| where isnotempty(SourceIP)\n| project TimeGenerated, Computer, SubjectUserName, SourceIP, LogonType, WorkstationName\n",
     "rules": [
       {
         "name": "uc-powershell-encoded",
@@ -101,35 +100,6 @@
           "accountFullName": "UserPrincipalName"
         },
         "customDetails": {}
-      },
-      {
-        "name": "test-automated-rule",
-        "displayName": "[PROD] [ORG] – Test Automated Rule",
-        "kql": "[variables('kqltestautomatedrule')]",
-        "severity": "High",
-        "enabled": true,
-        "frequency": "PT1H",
-        "period": "PT1H",
-        "tactics": [
-          "InitialAccess"
-        ],
-        "techniques": [
-          "T1078"
-        ],
-        "createIncident": true,
-        "grouping": {
-          "enabled": true,
-          "matchingMethod": "AllEntities"
-        },
-        "entities": {
-          "ipAddress": "SourceIP",
-          "hostName": "Computer",
-          "accountFullName": "SubjectUserName"
-        },
-        "customDetails": {
-          "LogonType": "LogonType",
-          "WorkstationName": "WorkstationName"
-        }
       }
     ]
   },

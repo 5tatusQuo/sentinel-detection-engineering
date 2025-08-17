@@ -6,8 +6,6 @@ param workspaceName string = 'sentinel-rg-dev'
 var kqlEncoded = loadTextContent('../kql/uc-powershell-encoded.kql')
 var kqlLogin = loadTextContent('../kql/suspicious-login-attempts.kql')
 var kqlAdmin = loadTextContent('../kql/admin-account-anomaly.kql')
-var kqltestautomatedrule = loadTextContent('../kql/example-detection.kql')
-var kqltest1 = loadTextContent('../kql/test1.kql')
 
 // Define rules for dev environment
 var rules = [
@@ -74,55 +72,6 @@ var rules = [
       accountFullName: 'UserPrincipalName'
     }
     customDetails: {}
-  }
-  {
-    name: 'test-automated-rule'
-    displayName: '[DEV] [ORG] – Test Automated Rule'
-    kql: kqltestautomatedrule
-    severity: 'Medium'
-    enabled: true
-    frequency: 'PT1H'
-    period: 'PT1H'
-    tactics: [ 'InitialAccess' ]
-    techniques: [ 'T1078' ]
-    createIncident: false
-    grouping: {
-      enabled: true
-      matchingMethod: 'AllEntities'
-    }
-    entities: {
-      accountFullName: 'SubjectUserName'
-      ipAddress: 'SourceIP'
-      hostName: 'Computer'
-    }
-    customDetails: {
-      LogonType: 'LogonType'
-      WorkstationName: 'WorkstationName'
-    }
-  }
-  {
-    name: 'test1'
-    displayName: '[DEV] [ORG] – Test1'
-    kql: kqltest1
-    severity: 'Low'
-    enabled: true
-    frequency: 'PT1H'
-    period: 'PT1H'
-    tactics: [ 'InitialAccess' ]
-    techniques: [ 'T1078' ]
-    createIncident: false
-    grouping: {
-      enabled: true
-      matchingMethod: 'AllEntities'
-    }
-    entities: {
-      accountFullName: 'SubjectUserName'
-      hostName: 'Computer'
-      ipAddress: 'IPAddress'
-    }
-    customDetails: {
-      LogonType: 'LogonType'
-    }
   }
 ]
 
