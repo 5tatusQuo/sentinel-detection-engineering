@@ -8,6 +8,7 @@ var kqlLogin = loadTextContent('../kql/suspicious-login-attempts.kql')
 var kqlAdmin = loadTextContent('../kql/admin-account-anomaly.kql')
 var kqltest1 = loadTextContent('../kql/test1.kql')
 var kqltest2 = loadTextContent('../kql/test2.kql')
+var kqltest4 = loadTextContent('../kql/test4.kql')
 
 // Define rules for dev environment
 var rules = [
@@ -118,6 +119,30 @@ var rules = [
       ipAddress: 'IpAddress'
       hostName: 'Computer'
       accountFullName: 'SubjectUserName'
+    }
+    customDetails: {
+      LogonType: 'LogonType'
+    }
+  }
+  {
+    name: 'test4'
+    displayName: '[DEV] [ORG] – Test4'
+    kql: kqltest4
+    severity: 'Low'
+    enabled: true
+    frequency: 'PT1H'
+    period: 'PT1H'
+    tactics: [ 'InitialAccess' ]
+    techniques: [ 'T1078' ]
+    createIncident: false
+    grouping: {
+      enabled: true
+      matchingMethod: 'AllEntities'
+    }
+    entities: {
+      accountFullName: 'SubjectUserName'
+      hostName: 'Computer'
+      ipAddress: 'IpAddress'
     }
     customDetails: {
       LogonType: 'LogonType'
