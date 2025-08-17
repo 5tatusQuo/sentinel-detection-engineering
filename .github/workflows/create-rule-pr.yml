@@ -46,6 +46,9 @@ permissions:
   contents: write
   pull-requests: write
 
+env:
+  GH_TOKEN: ${{ github.token }}
+
 jobs:
   create-rule-branch:
     runs-on: ubuntu-latest
