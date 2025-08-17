@@ -3,10 +3,6 @@ name: Test PR Trigger
 on:
   pull_request:
     branches: [ main ]
-    paths:
-      - 'env/**'
-      - 'infra/**'
-      - 'kql/**'
     types: [ opened, synchronize, reopened ]
   workflow_dispatch:
 
