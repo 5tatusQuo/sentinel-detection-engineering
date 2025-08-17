@@ -99,6 +99,9 @@ jobs:
         if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
           echo "Manual workflow dispatch - checking for changes"
           CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD | grep -E "(env/|infra/|kql/)" || true)
+        elif [ "${{ github.event_name }}" == "pull_request" ]; then
+          echo "Pull request - checking for changes against base branch"
+          CHANGED_FILES=$(git diff --name-only origin/main...HEAD | grep -E "(env/|infra/|kql/)" || true)
         else
           echo "Detecting changed files..."
           CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD | grep -E "(env/|infra/|kql/)" || true)
@@ -113,7 +116,14 @@ jobs:
         
         echo "Deployed rules: $DEPLOYED_RULES"
         
-        # Check if our expected rules are missing
+        # For pull requests, always deploy since we know there are changes
+        if [ "${{ github.event_name }}" == "pull_request" ]; then
+          echo "Pull request detected - will deploy to dev for testing"
+          echo "needs-deployment=true" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+        
+        # Check if our expected rules are missing (for main branch pushes)
         EXPECTED_RULES="[DEV] [ORG] – Suspicious PowerShell (EncodedCommand) [DEV] [ORG] – Suspicious Login Attempts [DEV] [ORG] – Admin Account Anomaly Detection"
         MISSING_RULES=""
         
