@@ -16,8 +16,8 @@ pwsh scripts/new-rule.ps1
 This will:
 1. **Ask you for rule details** (name, severity, tactics, etc.)
 2. **Create your KQL file** automatically
-3. **Generate configurations** for both dev and prod
-4. **Save everything** in the right places
+3. **Generate Bicep code** that you can copy-paste into deployment files
+4. **Provide step-by-step instructions** for adding to your Bicep files
 
 ### 📝 Manual Method
 
@@ -30,60 +30,68 @@ First, create your KQL query in the `kql/` directory:
 touch kql/my-new-detection.kql
 ```
 
-#### Step 2: Generate Configuration
+#### Step 2: Generate Bicep Configuration
 Use our generator script:
 ```bash
 pwsh scripts/generate-rule-config.ps1 -KqlFile "kql/my-new-detection.kql" -RuleName "my-new-detection" -Severity "Medium" -Environment "dev" -Tactics "InitialAccess" -Techniques "T1078"
 ```
 
-#### Step 3: Add to Environment Files
-Copy the generated configuration to your environment files:
+#### Step 3: Add to Bicep Files
+Copy the generated Bicep code to your deployment files:
 
-**For Dev (`dev-rules.json`):**
-```json
+**For Dev (`env/deploy-dev.bicep`):**
+```bicep
+// Add this KQL loading line:
+var kqlMyNewDetection = loadTextContent('../kql/my-new-detection.kql')
+
+// Add this rule object to the rules array:
 {
-  "name": "my-new-detection",
-  "displayName": "[DEV] [ORG] – My New Detection",
-  "kqlFile": "my-new-detection.kql",
-  "severity": "Medium",
-  "enabled": true,
-  "frequency": "PT1H",
-  "period": "PT1H",
-  "tactics": ["InitialAccess"],
-  "techniques": ["T1078"],
-  "createIncident": false,
-  "grouping": {
-    "enabled": true,
-    "matchingMethod": "AllEntities"
-  },
-  "entities": {
-    "accountFullName": "SubjectUserName"
-  },
-  "customDetails": {}
+  name: 'my-new-detection'
+  displayName: '[DEV] [ORG] – My New Detection'
+  kql: kqlMyNewDetection
+  severity: 'Medium'
+  enabled: true
+  frequency: 'PT1H'
+  period: 'PT1H'
+  tactics: [ 'InitialAccess' ]
+  techniques: [ 'T1078' ]
+  createIncident: false
+  grouping: {
+    enabled: true
+    matchingMethod: 'AllEntities'
+  }
+  entities: {
+    accountFullName: 'SubjectUserName'
+  }
+  customDetails: {}
 }
 ```
 
-**For Prod (`prod-rules.json`):**
-```json
+**For Prod (`env/deploy-prod.bicep`):**
+```bicep
+// Add this KQL loading line:
+var kqlMyNewDetection = loadTextContent('../kql/my-new-detection.kql')
+
+// Add this rule object to the rules array:
 {
-  "name": "my-new-detection",
-  "displayName": "[PROD] [ORG] – My New Detection",
-  "kqlFile": "my-new-detection.kql",
-  "severity": "High",
-  "enabled": true,
-  "frequency": "PT1H",
-  "period": "PT1H",
-  "tactics": ["InitialAccess"],
-  "techniques": ["T1078"],
-  "createIncident": true,
-  "grouping": {
-    "enabled": true,
-    "matchingMethod": "AllEntities"
-  },
-  "entities": {
-    "accountFullName": "SubjectUserName"
-  },
-  "customDetails": {}
+  name: 'my-new-detection'
+  displayName: '[PROD] [ORG] – My New Detection'
+  kql: kqlMyNewDetection
+  severity: 'High'
+  enabled: true
+  frequency: 'PT1H'
+  period: 'PT1H'
+  tactics: [ 'InitialAccess' ]
+  techniques: [ 'T1078' ]
+  createIncident: true
+  grouping: {
+    enabled: true
+    matchingMethod: 'AllEntities'
+  }
+  entities: {
+    accountFullName: 'SubjectUserName'
+  }
+  customDetails: {}
 }
 ```
 

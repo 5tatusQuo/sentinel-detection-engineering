@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.37.4.10188",
-      "templateHash": "3467192153890738068"
+      "templateHash": "13389189632993288773"
     }
   },
   "parameters": {
@@ -66,7 +66,10 @@
           "T1078"
         ],
         "createIncident": false,
-        "grouping": {},
+        "grouping": {
+          "enabled": true,
+          "matchingMethod": "AllEntities"
+        },
         "entities": {
           "ipAddress": "IPAddress"
         },

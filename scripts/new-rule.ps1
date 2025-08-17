@@ -6,8 +6,8 @@
 .DESCRIPTION
     Interactive script that helps you create a new detection rule by:
     1. Creating the KQL file
-    2. Generating the rule configuration
-    3. Adding it to the appropriate environment files
+    2. Generating the Bicep configuration
+    3. Providing copy-paste instructions for adding to deployment files
 
 .EXAMPLE
     .\new-rule.ps1
@@ -55,7 +55,7 @@ $kqlContent | Out-File -FilePath $kqlFile -Encoding UTF8
 Write-Host "✅ KQL file created: $kqlFile"
 
 # Generate configurations for both environments
-Write-Host "`n🔧 Generating rule configurations..."
+Write-Host "`n🔧 Generating Bicep configurations..."
 
 # Dev environment
 Write-Host "Generating DEV configuration..."
@@ -74,12 +74,15 @@ $prodConfig = & .\scripts\generate-rule-config.ps1 -KqlFile $kqlFile -RuleName $
 
 Write-Host "`n🎉 Rule creation complete!" -ForegroundColor Green
 Write-Host "`n📋 Next steps:"
-Write-Host "1. Review the generated configurations in env/rules/generated-*.json"
-Write-Host "2. Copy the rule objects to env/rules/dev-rules.json and env/rules/prod-rules.json"
-Write-Host "3. Test your KQL query in Azure Sentinel Logs"
-Write-Host "4. Commit your changes and deploy!"
+Write-Host "1. Copy the KQL loading lines to env/deploy-dev.bicep and env/deploy-prod.bicep"
+Write-Host "2. Copy the rule objects to the rules arrays in both Bicep files"
+Write-Host "3. Test your Bicep files with: az bicep build --file env/deploy-dev.bicep"
+Write-Host "4. Test your KQL query in Azure Sentinel Logs"
+Write-Host "5. Commit your changes and deploy!"
 
 Write-Host "`n📁 Files created:"
 Write-Host "  - $kqlFile"
-Write-Host "  - env/rules/generated-$ruleName-dev.json"
-Write-Host "  - env/rules/generated-$ruleName-prod.json"
+Write-Host "  - env/rules/generated-$ruleName-dev.bicep"
+Write-Host "  - env/rules/generated-$ruleName-prod.bicep"
+
+Write-Host "`n💡 Pro tip: Open the generated .bicep files to see exactly what to copy!"

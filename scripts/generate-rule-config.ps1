@@ -6,6 +6,7 @@
 .DESCRIPTION
     Analyzes a KQL query file and automatically generates a rule configuration
     with appropriate entity mappings and custom details based on the projected columns.
+    Outputs Bicep code that can be copied into deployment files.
 
 .PARAMETER KqlFile
     Path to the KQL file to analyze
@@ -165,44 +166,91 @@ $displayName = "[$envPrefix] [ORG] – $titleCase"
 $tacticsArray = @($Tactics -split ',' | ForEach-Object { $_.Trim() })
 $techniquesArray = @($Techniques -split ',' | ForEach-Object { $_.Trim() })
 
-# Generate the rule configuration
-$ruleConfig = @{
-    name = $RuleName
-    displayName = $displayName
-    kqlFile = (Split-Path $KqlFile -Leaf)
-    severity = $Severity
-    enabled = $true
-    frequency = "PT1H"
-    period = "PT1H"
-    tactics = $tacticsArray
-    techniques = $techniquesArray
-    createIncident = $CreateIncident
-    grouping = @{
-        enabled = $true
-        matchingMethod = "AllEntities"
-        lookbackDuration = "PT2H"
-        reopenClosedIncident = $false
+# Generate Bicep code
+$kqlVarName = "kql$($RuleName.Replace('-', '').Replace('_', ''))"
+$kqlFileName = Split-Path $KqlFile -Leaf
+
+# Build entities Bicep code
+$entitiesBicep = ""
+if ($entities.Count -gt 0) {
+    $entityLines = @()
+    foreach ($entity in $entities.GetEnumerator()) {
+        $entityLines += "      $($entity.Key): '$($entity.Value)'"
     }
-    entities = $entities
-    customDetails = $customDetails
+    $entitiesBicep = "`n    entities: {`n$($entityLines -join "`n")`n    }"
 }
 
-# Convert to JSON with proper formatting
-$jsonOutput = $ruleConfig | ConvertTo-Json -Depth 10
+# Build custom details Bicep code
+$customDetailsBicep = ""
+if ($customDetails.Count -gt 0) {
+    $detailLines = @()
+    foreach ($detail in $customDetails.GetEnumerator()) {
+        $detailLines += "      $($detail.Key): '$($detail.Value)'"
+    }
+    $customDetailsBicep = "`n    customDetails: {`n$($detailLines -join "`n")`n    }"
+}
 
-Write-Host "`n🎉 Generated rule configuration:"
+# Build tactics array
+$tacticsBicep = "[ " + ($tacticsArray | ForEach-Object { "'$_'" }) -join ", " + " ]"
+
+# Build techniques array  
+$techniquesBicep = "[ " + ($techniquesArray | ForEach-Object { "'$_'" }) -join ", " + " ]"
+
+# Generate the complete Bicep rule object
+$bicepRule = @"
+  {
+    name: '$RuleName'
+    displayName: '$displayName'
+    kql: $kqlVarName
+    severity: '$Severity'
+    enabled: true
+    frequency: 'PT1H'
+    period: 'PT1H'
+    tactics: $tacticsBicep
+    techniques: $techniquesBicep
+    createIncident: $($CreateIncident.ToString().ToLower())
+    grouping: {
+      enabled: true
+      matchingMethod: 'AllEntities'
+    }$entitiesBicep$customDetailsBicep
+  }
+"@
+
+# Generate the KQL loading line
+$kqlLoadingLine = "var $kqlVarName = loadTextContent('../kql/$kqlFileName')"
+
+Write-Host "`n🎉 Generated Bicep configuration:"
 Write-Host "=================================="
-Write-Host $jsonOutput
+Write-Host "`n📝 Add this KQL loading line to your Bicep file:"
+Write-Host "----------------------------------------"
+Write-Host $kqlLoadingLine
+Write-Host "`n📋 Add this rule object to your rules array:"
+Write-Host "----------------------------------------"
+Write-Host $bicepRule
 
 # Save to file
-$outputFile = "env/rules/generated-$RuleName.json"
-$jsonOutput | Out-File -FilePath $outputFile -Encoding UTF8
+$outputFile = "env/rules/generated-$RuleName.bicep"
+$output = @"
+// Generated rule configuration for $RuleName
+// Add this KQL loading line to your Bicep file:
+$kqlLoadingLine
+
+// Add this rule object to your rules array:
+$bicepRule
+"@
+
+$output | Out-File -FilePath $outputFile -Encoding UTF8
 
 Write-Host "`n💾 Configuration saved to: $outputFile"
 Write-Host "`n📋 Next steps:"
-Write-Host "1. Review the generated configuration"
-Write-Host "2. Copy the rule object to env/rules/$Environment-rules.json"
-Write-Host "3. Adjust severity, tactics, or other settings as needed"
+Write-Host "1. Copy the KQL loading line to env/deploy-$Environment.bicep"
+Write-Host "2. Copy the rule object to the rules array in env/deploy-$Environment.bicep"
+Write-Host "3. Test your Bicep file with: az bicep build --file env/deploy-$Environment.bicep"
 Write-Host "4. Commit and deploy!"
 
-return $ruleConfig
+return @{
+    KqlLoadingLine = $kqlLoadingLine
+    BicepRule = $bicepRule
+    Entities = $entities
+    CustomDetails = $customDetails
+}
