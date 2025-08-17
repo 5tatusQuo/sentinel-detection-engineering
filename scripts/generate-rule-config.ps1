@@ -6,7 +6,7 @@
 .DESCRIPTION
     Analyzes a KQL query file and automatically generates a rule configuration
     with appropriate entity mappings and custom details based on the projected columns.
-    Outputs Bicep code that can be copied into deployment files.
+    Provides the code to copy into Bicep files.
 
 .PARAMETER KqlFile
     Path to the KQL file to analyze
@@ -37,6 +37,7 @@
     - Entity mappings based on common column names
     - Custom details from projected columns
     - Appropriate grouping configuration
+    Then provides the code to copy into Bicep files.
 #>
 
 param(
@@ -191,10 +192,12 @@ if ($customDetails.Count -gt 0) {
 }
 
 # Build tactics array
-$tacticsBicep = "[ " + ($tacticsArray | ForEach-Object { "'$_'" }) -join ", " + " ]"
+$tacticsQuoted = $tacticsArray | ForEach-Object { "'$_'" }
+$tacticsBicep = "[ " + ($tacticsQuoted -join ", ") + " ]"
 
 # Build techniques array  
-$techniquesBicep = "[ " + ($techniquesArray | ForEach-Object { "'$_'" }) -join ", " + " ]"
+$techniquesQuoted = $techniquesArray | ForEach-Object { "'$_'" }
+$techniquesBicep = "[ " + ($techniquesQuoted -join ", ") + " ]"
 
 # Generate the complete Bicep rule object
 $bicepRule = @"
@@ -221,22 +224,30 @@ $kqlLoadingLine = "var $kqlVarName = loadTextContent('../kql/$kqlFileName')"
 
 Write-Host "`n🎉 Generated Bicep configuration:"
 Write-Host "=================================="
-Write-Host "`n📝 Add this KQL loading line to your Bicep file:"
+Write-Host "`n📝 KQL loading line:"
 Write-Host "----------------------------------------"
 Write-Host $kqlLoadingLine
-Write-Host "`n📋 Add this rule object to your rules array:"
+Write-Host "`n📋 Rule object:"
 Write-Host "----------------------------------------"
 Write-Host $bicepRule
 
-# Save to file
-$outputFile = "env/rules/generated-$RuleName.bicep"
+# Save the generated configuration
+$outputFile = "env/rules/generated-$RuleName-$Environment.bicep"
 $output = @"
-// Generated rule configuration for $RuleName
-// Add this KQL loading line to your Bicep file:
+// Generated rule configuration for $RuleName ($Environment)
+// 
+// STEP 1: Add this KQL loading line to env/deploy-$Environment.bicep
+// (add it after the existing KQL loading lines)
+//
 $kqlLoadingLine
-
-// Add this rule object to your rules array:
+//
+// STEP 2: Add this rule object to the rules array in env/deploy-$Environment.bicep
+// (add it before the closing bracket of the rules array)
+//
 $bicepRule
+//
+// STEP 3: Test your Bicep file
+// az bicep build --file env/deploy-$Environment.bicep
 "@
 
 $output | Out-File -FilePath $outputFile -Encoding UTF8
@@ -253,4 +264,5 @@ return @{
     BicepRule = $bicepRule
     Entities = $entities
     CustomDetails = $customDetails
+    OutputFile = $outputFile
 }

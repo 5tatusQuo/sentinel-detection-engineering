@@ -16,8 +16,9 @@ pwsh scripts/new-rule.ps1
 This will:
 1. **Ask you for rule details** (name, severity, tactics, etc.)
 2. **Create your KQL file** automatically
-3. **Generate Bicep code** that you can copy-paste into deployment files
-4. **Provide step-by-step instructions** for adding to your Bicep files
+3. **Analyze your KQL** to detect entity mappings and custom details
+4. **Generate Bicep code** that you can copy-paste into deployment files
+5. **Provide clear instructions** for adding to your Bicep files
 
 ### 📝 Manual Method
 
@@ -36,63 +37,23 @@ Use our generator script:
 pwsh scripts/generate-rule-config.ps1 -KqlFile "kql/my-new-detection.kql" -RuleName "my-new-detection" -Severity "Medium" -Environment "dev" -Tactics "InitialAccess" -Techniques "T1078"
 ```
 
-#### Step 3: Add to Bicep Files
-Copy the generated Bicep code to your deployment files:
+#### Step 3: Copy to Bicep Files
+The script generates files with copy-paste instructions. Just follow the steps:
 
-**For Dev (`env/deploy-dev.bicep`):**
-```bicep
-// Add this KQL loading line:
-var kqlMyNewDetection = loadTextContent('../kql/my-new-detection.kql')
+**The script generates files with clear copy-paste instructions!** Just follow the steps:
 
-// Add this rule object to the rules array:
-{
-  name: 'my-new-detection'
-  displayName: '[DEV] [ORG] – My New Detection'
-  kql: kqlMyNewDetection
-  severity: 'Medium'
-  enabled: true
-  frequency: 'PT1H'
-  period: 'PT1H'
-  tactics: [ 'InitialAccess' ]
-  techniques: [ 'T1078' ]
-  createIncident: false
-  grouping: {
-    enabled: true
-    matchingMethod: 'AllEntities'
-  }
-  entities: {
-    accountFullName: 'SubjectUserName'
-  }
-  customDetails: {}
-}
-```
+```bash
+# 1. Open the generated files to see what to copy
+# 2. Copy the KQL loading lines to your Bicep files
+# 3. Copy the rule objects to the rules arrays
+# 4. Test that everything works
+az bicep build --file env/deploy-dev.bicep
+az bicep build --file env/deploy-prod.bicep
 
-**For Prod (`env/deploy-prod.bicep`):**
-```bicep
-// Add this KQL loading line:
-var kqlMyNewDetection = loadTextContent('../kql/my-new-detection.kql')
-
-// Add this rule object to the rules array:
-{
-  name: 'my-new-detection'
-  displayName: '[PROD] [ORG] – My New Detection'
-  kql: kqlMyNewDetection
-  severity: 'High'
-  enabled: true
-  frequency: 'PT1H'
-  period: 'PT1H'
-  tactics: [ 'InitialAccess' ]
-  techniques: [ 'T1078' ]
-  createIncident: true
-  grouping: {
-    enabled: true
-    matchingMethod: 'AllEntities'
-  }
-  entities: {
-    accountFullName: 'SubjectUserName'
-  }
-  customDetails: {}
-}
+# 5. Commit and deploy
+git add .
+git commit -m "Add new detection rule: my-new-detection"
+git push
 ```
 
 ### Step 4: Deploy!
