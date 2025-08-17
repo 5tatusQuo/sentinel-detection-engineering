@@ -54,6 +54,15 @@ jobs:
       needs-deployment: ${{ steps.check-deployment-needs.outputs.needs-deployment }}
     
     steps:
+    - name: Debug - Workflow Started
+      run: |
+        echo "🎉 DEPLOYMENT WORKFLOW TRIGGERED!"
+        echo "Event: ${{ github.event_name }}"
+        echo "Action: ${{ github.event.action }}"
+        echo "Ref: ${{ github.ref }}"
+        echo "Base: ${{ github.event.pull_request.base.ref }}"
+        echo "Head: ${{ github.event.pull_request.head.ref }}"
+    
     - name: Checkout repository
       uses: actions/checkout@v4
       with:
