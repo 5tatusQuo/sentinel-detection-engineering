@@ -198,9 +198,12 @@ jobs:
         gh workflow run "Deploy Detection Rules" \
           --ref "$BRANCH_NAME" \
           --field environment=dev \
-          --field skip_validation=false
+          --field skip_validation=false \
+          --field target_branch="$BRANCH_NAME"
         
         echo "✅ Deployment workflow triggered successfully!"
+        echo "📋 Deployment triggered for branch: $BRANCH_NAME"
+        echo "🔗 Monitor deployment: https://github.com/${{ github.repository }}/actions/workflows/deploy.yml"
     
     - name: Deployment Instructions
       run: |
