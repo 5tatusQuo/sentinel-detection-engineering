@@ -107,17 +107,11 @@ jobs:
     
     - name: Generate rule configuration
       run: |
-        # Parse incident creation settings
-        INCIDENT_SETTING="${{ inputs.create_incidents }}"
-        DEV_INCIDENT="false"
-        PROD_INCIDENT="true"
-        
-        if [[ "$INCIDENT_SETTING" == "dev=true,prod=true" ]]; then
+        # Parse incident creation settings for dev
+        if [[ "${{ inputs.create_incidents }}" == "dev=true,prod=true" ]]; then
           DEV_INCIDENT="true"
-          PROD_INCIDENT="true"
-        elif [[ "$INCIDENT_SETTING" == "dev=false,prod=false" ]]; then
+        else
           DEV_INCIDENT="false"
-          PROD_INCIDENT="false"
         fi
         
         pwsh scripts/generate-rule-config.ps1 \
@@ -143,6 +137,13 @@ jobs:
           "High") PROD_SEVERITY="High" ;;
           "Critical") PROD_SEVERITY="Critical" ;;
         esac
+        
+        # Parse incident creation settings for prod
+        if [[ "${{ inputs.create_incidents }}" == "dev=false,prod=false" ]]; then
+          PROD_INCIDENT="false"
+        else
+          PROD_INCIDENT="true"
+        fi
         
         pwsh scripts/generate-rule-config.ps1 \
           -KqlFile "kql/${{ inputs.rule_name }}.kql" \
