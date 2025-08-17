@@ -67,61 +67,84 @@ SigninLogs
 4. **Click "Run"** to see if it works
 5. **Check the results** - do they look right?
 
-### Step 4: Add Your Rule to Dev Environment
+### Step 4: Configure Your Rule
 
-Open `env/deploy-dev.bicep` and add your rule to the `rules` array:
+#### 🚀 Super Easy Method (Recommended)
 
-```bicep
-// Load your KQL file
-var kqlMyDetection = loadTextContent('../kql/my-first-detection.kql')
+Use our automated rule creator:
 
-var rules = [
-  // ... existing rules ...
-  {
-    name: 'uc-my-first-detection'                    // Unique identifier
-    displayName: '[DEV] [ORG] – My First Detection'  // Name in Sentinel
-    kql: kqlMyDetection                              // Your KQL query
-    severity: 'Medium'                               // How serious is this?
-    enabled: true                                    // Turn it on
-    frequency: 'PT1H'                                // Run every hour
-    period: 'PT1H'                                   // Look back 1 hour
-    tactics: [ 'InitialAccess' ]                     // ATT&CK tactics
-    techniques: [ 'T1078' ]                          // ATT&CK techniques
-    createIncident: false                            // No incidents in dev
-    grouping: {}                                     // Use default grouping
-    entities: {                                      // Extract entities
-      ipAddress: 'IPAddress'
-    }
-    customDetails: {}                                // No custom details
-  }
-]
+```bash
+# Run the interactive rule creator
+pwsh scripts/new-rule.ps1
 ```
 
-### Step 5: Add Your Rule to Prod Environment
+This will automatically:
+- Create your KQL file
+- Generate configurations for both dev and prod
+- Set up entity mappings and custom details
+- Save everything in the right places
 
-Copy the same rule to `env/deploy-prod.bicep` but adjust for production:
+#### 📝 Manual Method
 
-```bicep
+If you prefer to do it manually:
+
+**Step 4a: Add Your Rule to Dev Environment**
+
+Open `env/rules/dev-rules.json` and add your rule to the `rules` array. This is **much easier** than editing Bicep files!
+
+```json
 {
-  name: 'uc-my-first-detection'
-  displayName: '[PROD] [ORG] – My First Detection'  // Changed to PROD
-  kql: kqlMyDetection
-  severity: 'High'                                   // Higher severity for prod
-  enabled: true
-  frequency: 'PT1H'
-  period: 'PT1H'
-  tactics: [ 'InitialAccess' ]
-  techniques: [ 'T1078' ]
-  createIncident: true                               // Create incidents in prod
-  grouping: {}
-  entities: {
-    ipAddress: 'IPAddress'
-  }
-  customDetails: {}
+  "name": "uc-my-first-detection",
+  "displayName": "[DEV] [ORG] – My First Detection",
+  "kqlFile": "my-first-detection.kql",
+  "severity": "Medium",
+  "enabled": true,
+  "frequency": "PT1H",
+  "period": "PT1H",
+  "tactics": ["InitialAccess"],
+  "techniques": ["T1078"],
+  "createIncident": false,
+  "grouping": {
+    "enabled": true,
+    "matchingMethod": "AllEntities"
+  },
+  "entities": {
+    "ipAddress": "IPAddress"
+  },
+  "customDetails": {}
 }
 ```
 
-### Step 6: Test Locally
+**Step 4b: Add Your Rule to Prod Environment**
+
+Copy the same rule to `env/rules/prod-rules.json` but adjust for production:
+
+```json
+{
+  "name": "uc-my-first-detection",
+  "displayName": "[PROD] [ORG] – My First Detection",
+  "kqlFile": "my-first-detection.kql",
+  "severity": "High",
+  "enabled": true,
+  "frequency": "PT1H",
+  "period": "PT1H",
+  "tactics": ["InitialAccess"],
+  "techniques": ["T1078"],
+  "createIncident": true,
+  "grouping": {
+    "enabled": true,
+    "matchingMethod": "AllEntities"
+  },
+  "entities": {
+    "ipAddress": "IPAddress"
+  },
+  "customDetails": {}
+}
+```
+
+**That's it!** No more complex Bicep editing! 🎉
+
+### Step 5: Test Locally
 
 Before you deploy, test that everything works:
 
@@ -136,7 +159,7 @@ az deployment group what-if \
   --parameters env/params/dev.jsonc
 ```
 
-### Step 7: Deploy Your Rule
+### Step 6: Deploy Your Rule
 
 1. **Create a Pull Request** with your changes
 2. **The pipeline will automatically**:
@@ -151,13 +174,13 @@ az deployment group what-if \
 
 | Property | What it does | Example |
 |----------|-------------|---------|
-| `name` | Unique identifier | `'uc-my-detection'` |
-| `displayName` | Name in Sentinel portal | `'[DEV] [ORG] – My Detection'` |
-| `kql` | Your detection query | `kqlMyDetection` |
-| `severity` | How serious is this? | `'Medium'`, `'High'`, `'Critical'` |
+| `name` | Unique identifier | `"uc-my-detection"` |
+| `displayName` | Name in Sentinel portal | `"[DEV] [ORG] – My Detection"` |
+| `kqlFile` | Your KQL file name | `"my-detection.kql"` |
+| `severity` | How serious is this? | `"Medium"`, `"High"`, `"Critical"` |
 | `enabled` | Turn rule on/off | `true` or `false` |
-| `frequency` | How often to run | `'PT1H'` (every hour) |
-| `period` | How far back to look | `'PT1H'` (last hour) |
+| `frequency` | How often to run | `"PT1H"` (every hour) |
+| `period` | How far back to look | `"PT1H"` (last hour) |
 
 ### ATT&CK Mapping
 

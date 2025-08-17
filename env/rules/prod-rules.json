@@ -1,0 +1,68 @@
+{
+  "rules": [
+    {
+      "name": "uc-powershell-encoded",
+      "displayName": "[PROD] [ORG] – Suspicious PowerShell (EncodedCommand)",
+      "kqlFile": "uc-powershell-encoded.kql",
+      "severity": "Medium",
+      "enabled": true,
+      "frequency": "PT1H",
+      "period": "PT1H",
+      "tactics": ["Execution", "DefenseEvasion"],
+      "techniques": ["T1059"],
+      "createIncident": true,
+      "grouping": {
+        "enabled": true,
+        "matchingMethod": "AllEntities"
+      },
+      "entities": {
+        "accountFullName": "SubjectUserName",
+        "hostName": "Computer"
+      },
+      "customDetails": {
+        "EncodedArgument": "EncArg",
+        "CommandLine": "CommandLine"
+      }
+    },
+    {
+      "name": "uc-suspicious-login",
+      "displayName": "[PROD] [ORG] – Suspicious Login Attempts",
+      "kqlFile": "suspicious-login-attempts.kql",
+      "severity": "Medium",
+      "enabled": true,
+      "frequency": "PT1H",
+      "period": "PT1H",
+      "tactics": ["InitialAccess"],
+      "techniques": ["T1078"],
+      "createIncident": true,
+      "grouping": {
+        "enabled": true,
+        "matchingMethod": "AllEntities"
+      },
+      "entities": {
+        "ipAddress": "IPAddress"
+      },
+      "customDetails": {}
+    },
+    {
+      "name": "uc-admin-anomaly",
+      "displayName": "[PROD] [ORG] – Admin Account Anomaly Detection",
+      "kqlFile": "admin-account-anomaly.kql",
+      "severity": "High",
+      "enabled": true,
+      "frequency": "PT1H",
+      "period": "PT1H",
+      "tactics": ["Persistence", "PrivilegeEscalation", "DefenseEvasion"],
+      "techniques": ["T1078"],
+      "createIncident": true,
+      "grouping": {
+        "enabled": true,
+        "matchingMethod": "AllEntities"
+      },
+      "entities": {
+        "accountFullName": "UserPrincipalName"
+      },
+      "customDetails": {}
+    }
+  ]
+}

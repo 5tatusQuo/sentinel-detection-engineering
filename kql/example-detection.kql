@@ -1,0 +1,7 @@
+SecurityEvent
+| where EventID == 4624
+| where LogonType == 3
+| where TimeGenerated > ago(1h)
+| extend SourceIP = extract(@"(?<=::ffff:)(\d+\.\d+\.\d+\.\d+)", 1, IpAddress)
+| where isnotempty(SourceIP)
+| project TimeGenerated, Computer, SubjectUserName, SourceIP, LogonType, WorkstationName
