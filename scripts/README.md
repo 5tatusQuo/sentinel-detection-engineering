@@ -25,6 +25,13 @@ This directory contains PowerShell scripts that help automate Microsoft Sentinel
 
 **When it runs**: During validation in the deployment workflow
 
+### `sync-sentinel-changes.ps1`
+**What it does**: Exports current Sentinel alert rules from the dev environment and automatically updates KQL and Bicep files to match the portal configuration.
+
+**Why you need it**: Allows reviewers to make changes in the Sentinel portal (easier GUI) and then sync those changes back to the repository automatically.
+
+**When it runs**: Manually by reviewers during the review process
+
 ## 🚀 How to Use These Scripts
 
 ### Prerequisites
@@ -73,6 +80,18 @@ pwsh scripts/validate-kql-columns.ps1 \
   -CustomDetails '{"CustomField":"ColumnName"}'
 ```
 
+#### Sync Sentinel Changes
+```powershell
+# Sync all rules from dev environment
+.\scripts\sync-sentinel-changes.ps1 -ResourceGroup "SENTINEL_RG_DEV" -WorkspaceName "SENTINEL_WS_DEV"
+
+# Sync specific rule only
+.\scripts\sync-sentinel-changes.ps1 -ResourceGroup "SENTINEL_RG_DEV" -WorkspaceName "SENTINEL_WS_DEV" -RuleName "test5"
+
+# Dry run to see what would change
+.\scripts\sync-sentinel-changes.ps1 -ResourceGroup "SENTINEL_RG_DEV" -WorkspaceName "SENTINEL_WS_DEV" -DryRun
+```
+
 ## 🔐 Authentication
 
 The scripts use Azure CLI authentication. Make sure you're logged in:
@@ -92,6 +111,7 @@ These scripts are automatically used by the GitHub Actions workflows:
 - **`vendor-sync.yml`** uses `export_enabled_rules.ps1` to sync vendor rules
 - **`drift-check.yml`** uses `detect_drift.ps1` to check for drift
 - **`deploy.yml`** uses `validate-kql-columns.ps1` during validation
+- **Reviewers** use `sync-sentinel-changes.ps1` to sync portal changes back to repository
 
 ## 🆘 Troubleshooting
 
