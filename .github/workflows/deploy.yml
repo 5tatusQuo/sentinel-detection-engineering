@@ -344,39 +344,12 @@ jobs:
         tenant-id: ${{ secrets.AZURE_TENANT_ID }}
         subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
     
-    - name: Validate deployment (Prod)
-      run: |
-        echo "Validating deployment against Prod environment..."
-        if [ "${{ needs.detect-deployment-needs.outputs.needs-deployment }}" == "true" ]; then
-          az deployment group validate \
-            --resource-group ${{ secrets.SENTINEL_RG_PROD }} \
-            --template-file env/deploy-prod.bicep \
-            --parameters env/params/prod.jsonc
-          echo "✅ Prod deployment validation completed successfully"
-        else
-          echo "No deployment needed - skipping validation"
-        fi
-    
-    - name: What-if deployment (Prod)
-      run: |
-        echo "Running what-if deployment for Prod environment..."
-        if [ "${{ needs.detect-deployment-needs.outputs.needs-deployment }}" == "true" ]; then
-          az deployment group what-if \
-            --resource-group ${{ secrets.SENTINEL_RG_PROD }} \
-            --template-file env/deploy-prod.bicep \
-            --parameters env/params/prod.jsonc \
-            --no-pretty-print --only-show-errors
-          echo "✅ What-if deployment completed successfully"
-        else
-          echo "No deployment needed - skipping what-if"
-        fi
-    
     - name: Deploy to Prod
       run: |
         echo "Deploying to Production environment..."
         if [ "${{ needs.detect-deployment-needs.outputs.needs-deployment }}" == "true" ]; then
           az deployment group create \
-            --resource-group ${{ secrets.SENTINEL_WS_PROD }} \
+            --resource-group ${{ secrets.SENTINEL_RG_PROD }} \
             --template-file env/deploy-prod.bicep \
             --parameters env/params/prod.jsonc \
             --verbose
@@ -390,8 +363,8 @@ jobs:
         echo "Verifying Production deployment..."
         # List deployed rules
         az sentinel alert-rule list \
-          --resource-group ${{ secrets.SENTINEL_WS_PROD }} \
-          --workspace-name ${{ secrets.SENTINEL_RG_PROD }} \
+          --resource-group ${{ secrets.SENTINEL_RG_PROD }} \
+          --workspace-name ${{ secrets.SENTINEL_WS_PROD }} \
           --query '[].{Name: displayName, Enabled: enabled, Severity: severity}' \
           --output table
     
