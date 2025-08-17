@@ -84,7 +84,7 @@ jobs:
           -Environment "dev" \
           -Tactics "${{ inputs.tactics }}" \
           -Techniques "${{ inputs.techniques }}" \
-          -CreateIncident $false
+          -CreateIncident:false
     
     - name: Generate prod configuration
       run: |
@@ -104,7 +104,7 @@ jobs:
           -Environment "prod" \
           -Tactics "${{ inputs.tactics }}" \
           -Techniques "${{ inputs.techniques }}" \
-          -CreateIncident $true
+          -CreateIncident:true
     
     - name: Validate Bicep files
       run: |
