@@ -105,11 +105,6 @@ jobs:
         ls -la infra/ || echo "infra directory not found"
         echo "=== END DEBUG ==="
     
-    - name: Install Azure CLI
-      run: |
-        curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
-        az --version
-    
     - name: Login to Azure
       uses: azure/login@v2
       with:
@@ -186,11 +181,6 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
-    
-    - name: Install Azure CLI
-      run: |
-        curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
-        az --version
     
     - name: Install Bicep CLI
       run: |
@@ -292,11 +282,6 @@ jobs:
         echo "Needs deployment: ${{ needs.detect-deployment-needs.outputs.needs-deployment }}"
         echo "=== END DEBUG INFO ==="
     
-    - name: Install Azure CLI
-      run: |
-        curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
-        az --version
-    
     - name: Install Bicep CLI
       run: |
         az bicep install
@@ -346,11 +331,6 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
-    
-    - name: Install Azure CLI
-      run: |
-        curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
-        az --version
     
     - name: Install Bicep CLI
       run: |
