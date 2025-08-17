@@ -164,8 +164,10 @@ jobs:
           exit 0
         fi
         
-        # Output changed files for other jobs to use
-        echo "changed-files=$CHANGED_FILES" >> $GITHUB_OUTPUT
+        # Output changed files for other jobs to use (properly escaped)
+        echo "changed-files<<EOF" >> $GITHUB_OUTPUT
+        echo "$CHANGED_FILES" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
         
         # Check for changes first, regardless of branch
         if [ -n "$CHANGED_FILES" ]; then
