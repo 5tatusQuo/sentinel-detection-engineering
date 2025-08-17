@@ -64,6 +64,17 @@ jobs:
         echo "Head: ${{ github.event.pull_request.head.ref }}"
         echo "Target branch: ${{ github.event.inputs.target_branch }}"
         echo "Environment: ${{ github.event.inputs.environment }}"
+        echo ""
+        echo "📋 Deployment Plan:"
+        if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+          echo "  ✅ Main branch push - will deploy to PROD only"
+        elif [[ "${{ github.ref }}" == refs/heads/feature/* ]]; then
+          echo "  ✅ Feature branch push - will deploy to DEV only"
+        elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
+          echo "  ✅ Pull request - will deploy to DEV only"
+        else
+          echo "  ❓ Unknown trigger - check conditions"
+        fi
     
     - name: Checkout repository
       uses: actions/checkout@v4
@@ -245,7 +256,7 @@ jobs:
     needs: [detect-deployment-needs, build-validate]
     runs-on: ubuntu-latest
     if: |
-      (github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/feature/'))) || 
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/feature/')) || 
       (github.event_name == 'pull_request') || 
       (github.event_name == 'workflow_dispatch' && inputs.environment == 'dev')
     
@@ -307,7 +318,7 @@ jobs:
           --output table
 
   deploy-prod:
-    needs: [detect-deployment-needs, build-validate, deploy-dev]
+    needs: [detect-deployment-needs, build-validate]
     runs-on: ubuntu-latest
     if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.environment == 'prod')
     environment: sentinel-prod
