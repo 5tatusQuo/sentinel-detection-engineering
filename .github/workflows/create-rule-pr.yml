@@ -188,19 +188,34 @@ jobs:
           --label "enhancement,detection-rule" \
           --assignee "${{ github.actor }}"
     
+    - name: Trigger deployment to test environment
+      run: |
+        BRANCH_NAME="feature/add-rule-${{ inputs.rule_name }}"
+        echo "🚀 Automatically triggering deployment to dev environment for testing..."
+        
+        # Trigger the Deploy Detection Rules workflow on the new branch
+        gh workflow run "Deploy Detection Rules" \
+          --ref "$BRANCH_NAME" \
+          --field environment=dev \
+          --field skip_validation=false
+        
+        echo "✅ Deployment workflow triggered successfully!"
+    
     - name: Deployment Instructions
       run: |
-        echo "🎉 Pull request created successfully!"
+        echo "🎉 Pull request created and deployment triggered successfully!"
+        echo ""
+        echo "📋 What just happened:"
+        echo "1. ✅ PR created with new detection rule"
+        echo "2. ✅ Deployment to dev environment triggered automatically"
+        echo "3. 🔄 Rule is now deploying to test Sentinel instance"
         echo ""
         echo "📋 Next steps:"
-        echo "1. The PR has been created and is ready for review"
-        echo "2. To deploy to dev environment for testing, run:"
-        echo "   gh workflow run 'Deploy Detection Rules' --ref 'feature/add-rule-${{ inputs.rule_name }}'"
-        echo "3. Review the rule in the PR"
-        echo "4. Test the rule in dev environment"
-        echo "5. Merge the PR to deploy to production"
+        echo "1. Monitor the deployment workflow in the Actions tab"
+        echo "2. Review the rule in the PR once deployment completes"
+        echo "3. Test the rule in dev Sentinel environment"
+        echo "4. Approve and merge this PR to deploy to production"
         echo ""
-        echo "⚠️  Note: Due to Azure OIDC configuration, deployment to dev requires manual trigger"
-        echo "   This ensures security while allowing testing before production deployment"
+        echo "🔗 View deployment progress: https://github.com/${{ github.repository }}/actions/workflows/deploy.yml"
     
 
