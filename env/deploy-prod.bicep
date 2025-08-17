@@ -6,6 +6,7 @@ param workspaceName string = 'sentinel-rg-prod'
 var kqlEncoded = loadTextContent('../kql/uc-powershell-encoded.kql')
 var kqlLogin = loadTextContent('../kql/suspicious-login-attempts.kql')
 var kqlAdmin = loadTextContent('../kql/admin-account-anomaly.kql')
+var kqltest1 = loadTextContent('../kql/test1.kql')
 
 // Define rules for prod environment (higher thresholds, create incidents)
 var rules = [
@@ -72,6 +73,30 @@ var rules = [
       accountFullName: 'UserPrincipalName'
     }
     customDetails: {}
+  }
+  {
+    name: 'test1'
+    displayName: '[PROD] [ORG] – Test1'
+    kql: kqltest1
+    severity: 'Medium'
+    enabled: true
+    frequency: 'PT1H'
+    period: 'PT1H'
+    tactics: [ 'InitialAccess' ]
+    techniques: [ 'T1078' ]
+    createIncident: true
+    grouping: {
+      enabled: true
+      matchingMethod: 'AllEntities'
+    }
+    entities: {
+      accountFullName: 'SubjectUserName'
+      hostName: 'Computer'
+      ipAddress: 'IPAddress'
+    }
+    customDetails: {
+      LogonType: 'LogonType'
+    }
   }
 ]
 
