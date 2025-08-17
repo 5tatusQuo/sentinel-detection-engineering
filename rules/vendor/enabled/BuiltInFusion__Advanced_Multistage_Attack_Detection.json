@@ -1,5 +1,5 @@
 {
-  "id": "/subscriptions/00b73705-e16f-45d5-9f3a-74995d9af2b9/resourceGroups/sentinel-ws-dev/providers/Microsoft.OperationalInsights/workspaces/sentinel-rg-dev/providers/Microsoft.SecurityInsights/alertRules/BuiltInFusion",
+  "id": "/subscriptions/00b73705-e16f-45d5-9f3a-74995d9af2b9/resourceGroups/sentinel-ws-prod/providers/Microsoft.OperationalInsights/workspaces/sentinel-rg-prod/providers/Microsoft.SecurityInsights/alertRules/BuiltInFusion",
   "name": "BuiltInFusion",
   "type": "Microsoft.SecurityInsights/alertRules",
   "kind": "Fusion",
