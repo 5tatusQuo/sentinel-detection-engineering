@@ -61,7 +61,15 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$Techniques,
     
-    [bool]$CreateIncident = $false
+    [bool]$CreateIncident = $false,
+    
+    [string]$Frequency = "PT1H",
+    
+    [string]$Period = "PT1H",
+    
+    [bool]$GroupingEnabled = $true,
+    
+    [string]$GroupingMethod = "AllEntities"
 )
 
 # Set default CreateIncident based on environment if not specified
@@ -207,14 +215,14 @@ $bicepRule = @"
     kql: $kqlVarName
     severity: '$Severity'
     enabled: true
-    frequency: 'PT1H'
-    period: 'PT1H'
+    frequency: '$Frequency'
+    period: '$Period'
     tactics: $tacticsBicep
     techniques: $techniquesBicep
     createIncident: $($CreateIncident.ToString().ToLower())
     grouping: {
-      enabled: true
-      matchingMethod: 'AllEntities'
+      enabled: $($GroupingEnabled.ToString().ToLower())
+      matchingMethod: '$GroupingMethod'
     }$entitiesBicep$customDetailsBicep
   }
 "@

@@ -40,6 +40,39 @@ on:
           | where LogonType == 3
           | where TimeGenerated > ago(1h)
           | project TimeGenerated, Computer, SubjectUserName, IpAddress, LogonType
+      frequency:
+        description: 'Query frequency (ISO 8601 duration, e.g., PT1H for 1 hour)'
+        required: false
+        type: string
+        default: 'PT1H'
+      period:
+        description: 'Query period (ISO 8601 duration, e.g., PT1H for 1 hour)'
+        required: false
+        type: string
+        default: 'PT1H'
+      create_incident_dev:
+        description: 'Create incidents in dev environment'
+        required: false
+        type: boolean
+        default: false
+      create_incident_prod:
+        description: 'Create incidents in prod environment'
+        required: false
+        type: boolean
+        default: true
+      grouping_enabled:
+        description: 'Enable alert grouping'
+        required: false
+        type: boolean
+        default: true
+      grouping_method:
+        description: 'Grouping method (AllEntities or Selected)'
+        required: false
+        type: choice
+        options:
+          - AllEntities
+          - Selected
+        default: 'AllEntities'
 
 permissions:
   id-token: write
@@ -90,7 +123,11 @@ jobs:
           -Environment "dev" \
           -Tactics "${{ inputs.tactics }}" \
           -Techniques "${{ inputs.techniques }}" \
-          -CreateIncident:false
+          -CreateIncident:${{ inputs.create_incident_dev }} \
+          -Frequency "${{ inputs.frequency }}" \
+          -Period "${{ inputs.period }}" \
+          -GroupingEnabled:${{ inputs.grouping_enabled }} \
+          -GroupingMethod "${{ inputs.grouping_method }}"
     
     - name: Generate prod configuration
       run: |
@@ -110,7 +147,11 @@ jobs:
           -Environment "prod" \
           -Tactics "${{ inputs.tactics }}" \
           -Techniques "${{ inputs.techniques }}" \
-          -CreateIncident:true
+          -CreateIncident:${{ inputs.create_incident_prod }} \
+          -Frequency "${{ inputs.frequency }}" \
+          -Period "${{ inputs.period }}" \
+          -GroupingEnabled:${{ inputs.grouping_enabled }} \
+          -GroupingMethod "${{ inputs.grouping_method }}"
     
     - name: Validate Bicep files
       run: |
@@ -139,7 +180,11 @@ jobs:
         - Add rule configuration to prod environment
         - Severity: ${{ inputs.severity }} (dev) / $PROD_SEVERITY (prod)
         - Tactics: ${{ inputs.tactics }}
-        - Techniques: ${{ inputs.techniques }}"
+        - Techniques: ${{ inputs.techniques }}
+        - Frequency: ${{ inputs.frequency }}
+        - Period: ${{ inputs.period }}
+        - Create Incidents: ${{ inputs.create_incident_dev }} (dev) / ${{ inputs.create_incident_prod }} (prod)
+        - Grouping: ${{ inputs.grouping_enabled }} (${{ inputs.grouping_method }})"
     
     - name: Push branch and create PR
       run: |
@@ -160,6 +205,10 @@ jobs:
         - **Severity**: \`${{ inputs.severity }}\` (dev) / \`$PROD_SEVERITY\` (prod)
         - **Tactics**: \`${{ inputs.tactics }}\`
         - **Techniques**: \`${{ inputs.techniques }}\`
+        - **Frequency**: \`${{ inputs.frequency }}\`
+        - **Period**: \`${{ inputs.period }}\`
+        - **Create Incidents**: \`${{ inputs.create_incident_dev }}\` (dev) / \`${{ inputs.create_incident_prod }}\` (prod)
+        - **Grouping**: \`${{ inputs.grouping_enabled }}\` (\`${{ inputs.grouping_method }}\`)
 
         ### 📁 Files Changed
         - \`kql/${{ inputs.rule_name }}.kql\` - New KQL query
