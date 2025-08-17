@@ -214,51 +214,41 @@ jobs:
     - name: Validate Bicep templates (static)
       run: |
         echo "Validating Bicep templates (static checks)..."
-        if [ "${{ needs.detect-deployment-needs.outputs.needs-deployment }}" == "true" ]; then
-          echo "Building main templates..."
-          az bicep build --file infra/sentinel-rules.bicep
-          az bicep build --file infra/modules/scheduledRule.bicep
-          az bicep build --file env/deploy-dev.bicep
-          az bicep build --file env/deploy-prod.bicep
-          echo "✅ Bicep templates validated successfully"
-        else
-          echo "No deployment needed - skipping validation"
-        fi
+        echo "Building main templates..."
+        az bicep build --file infra/sentinel-rules.bicep
+        az bicep build --file infra/modules/scheduledRule.bicep
+        az bicep build --file env/deploy-dev.bicep
+        az bicep build --file env/deploy-prod.bicep
+        echo "✅ Bicep templates validated successfully"
     
     - name: Validate deployment (Dev)
       run: |
         echo "Validating deployment against Dev environment..."
-        if [ "${{ needs.detect-deployment-needs.outputs.needs-deployment }}" == "true" ]; then
-          az deployment group validate \
-            --resource-group ${{ secrets.SENTINEL_RG_DEV }} \
-            --template-file env/deploy-dev.bicep \
-            --parameters env/params/dev.jsonc
-          echo "✅ Dev deployment validation completed successfully"
-        else
-          echo "No deployment needed - skipping validation"
-        fi
+        az deployment group validate \
+          --resource-group ${{ secrets.SENTINEL_RG_DEV }} \
+          --template-file env/deploy-dev.bicep \
+          --parameters env/params/dev.jsonc
+        echo "✅ Dev deployment validation completed successfully"
     
     - name: What-if deployment (Dev)
       run: |
         echo "Running what-if deployment for Dev environment..."
-        if [ "${{ needs.detect-deployment-needs.outputs.needs-deployment }}" == "true" ]; then
-          az deployment group what-if \
-            --resource-group ${{ secrets.SENTINEL_RG_DEV }} \
-            --template-file env/deploy-dev.bicep \
-            --parameters env/params/dev.jsonc \
-            --no-pretty-print --only-show-errors
-          echo "✅ What-if deployment completed successfully"
-        else
-          echo "No deployment needed - skipping what-if"
-        fi
+        az deployment group what-if \
+          --resource-group ${{ secrets.SENTINEL_RG_DEV }} \
+          --template-file env/deploy-dev.bicep \
+          --parameters env/params/dev.jsonc \
+          --no-pretty-print --only-show-errors
+        echo "✅ What-if deployment completed successfully"
 
   deploy-dev:
     needs: [detect-deployment-needs, build-validate]
     runs-on: ubuntu-latest
     if: |
-      (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/feature/')) || 
-      (github.event_name == 'pull_request') || 
-      (github.event_name == 'workflow_dispatch' && inputs.environment == 'dev')
+      (needs.detect-deployment-needs.outputs.needs-deployment == 'true') && (
+        (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/feature/')) || 
+        (github.event_name == 'pull_request') || 
+        (github.event_name == 'workflow_dispatch' && inputs.environment == 'dev')
+      )
     
     steps:
     - name: Checkout repository
@@ -320,7 +310,11 @@ jobs:
   deploy-prod:
     needs: [detect-deployment-needs, build-validate]
     runs-on: ubuntu-latest
-    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.environment == 'prod')
+    if: |
+      (needs.detect-deployment-needs.outputs.needs-deployment == 'true') && (
+        (github.event_name == 'push' && github.ref == 'refs/heads/main') || 
+        (github.event_name == 'workflow_dispatch' && inputs.environment == 'prod')
+      )
     environment: sentinel-prod
     
     steps:
