@@ -10,11 +10,6 @@ on:
       - '.github/workflows/deploy.yml'
   pull_request:
     branches: [ main ]
-    paths:
-      - 'env/**'
-      - 'infra/**'
-      - 'kql/**'
-      - '.github/workflows/deploy.yml'
     types: [ opened, synchronize, reopened ]
   workflow_dispatch:
     inputs:
