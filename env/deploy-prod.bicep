@@ -15,7 +15,30 @@ var kqltest5 = loadTextContent('../kql/test5.kql')
 var rules = [
   {
     name: 'uc-powershell-encoded'
-    displayName: '[PROD] [ORG] – Suspicious PowerShell (EncodedCommand)'
+    displayName: '[PROD
+  {
+    name: 'admin-account-anomaly-detection'
+    displayName: '[PROD] [ORG] – Admin Account Anomaly Detection'
+    kql: kqladmin-account-anomaly-detection
+    severity: 'Critical'
+    enabled: true
+    frequency: 'PT1H'
+    period: 'PT1H'
+    tactics: [ DefenseEvasion, Persistence, PrivilegeEscalation ]
+    techniques: [  ]
+    createIncident: true
+    grouping: {
+      enabled: true
+      matchingMethod: 'Selected'
+    }
+    entities: {
+      accountFullName: 'UserPrincipalName'
+    }
+    customDetails: {
+      // TODO: Sync customDetails if needed
+    }
+  }
+  ] [ORG] – Suspicious PowerShell (EncodedCommand)'
     kql: kqlEncoded
     severity: 'Medium'
     enabled: true
@@ -186,3 +209,4 @@ module sentinelRules '../infra/sentinel-rules.bicep' = {
 
 // Outputs
 output deployedRules array = sentinelRules.outputs.deployedRules
+
