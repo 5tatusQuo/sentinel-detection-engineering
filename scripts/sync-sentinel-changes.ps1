@@ -256,19 +256,97 @@ $groupingBlock$entitiesBlock    customDetails: {
         # Helper to update content: replace if exists, else append to array
         function Update-Content {
             param([string]$content, [string]$ruleObj, [string]$rname)
-            $escName = [regex]::Escape($rname)
-            $pat = "(?s)\{\s*name:\s*'$escName'.*?\n\s*\}"
-            if ($content -match $pat) {
-                return $content -replace $pat, $ruleObj
+            
+            # Find rule blocks by manually parsing brace levels
+            function Find-RuleBlock {
+                param([string]$text, [string]$searchDisplayName, [string]$searchName)
+                
+                $lines = $text -split "`n"
+                $inRulesArray = $false
+                $inRuleBlock = $false
+                $braceLevel = 0
+                $ruleStartLine = -1
+                $ruleEndLine = -1
+                $currentRule = ""
+                
+                for ($i = 0; $i -lt $lines.Count; $i++) {
+                    $line = $lines[$i]
+                    
+                    # Track if we're in the rules array
+                    if ($line -match 'var\s+rules\s*=\s*\[') {
+                        $inRulesArray = $true
+                        continue
+                    }
+                    
+                    if ($inRulesArray) {
+                        # Count braces to track nesting
+                        $openBraces = ($line -split '\{').Length - 1
+                        $closeBraces = ($line -split '\}').Length - 1
+                        $braceLevel += $openBraces - $closeBraces
+                        
+                        # Start of a rule block
+                        if ($line -match '^\s*\{' -and $braceLevel -eq 1 -and -not $inRuleBlock) {
+                            $inRuleBlock = $true
+                            $ruleStartLine = $i
+                            $currentRule = ""
+                        }
+                        
+                        if ($inRuleBlock) {
+                            $currentRule += $line + "`n"
+                            
+                            # End of rule block
+                            if ($braceLevel -eq 0) {
+                                $ruleEndLine = $i
+                                $inRuleBlock = $false
+                                
+                                # Check if this is the rule we're looking for
+                                if (($searchDisplayName -and $currentRule -match [regex]::Escape($searchDisplayName)) -or
+                                    ($searchName -and $currentRule -match "name:\s*'$([regex]::Escape($searchName))'")) {
+                                    return @{
+                                        Found = $true
+                                        StartLine = $ruleStartLine
+                                        EndLine = $ruleEndLine
+                                        Content = $currentRule.TrimEnd("`n")
+                                    }
+                                }
+                                $currentRule = ""
+                            }
+                        }
+                        
+                        # End of rules array
+                        if ($line -match '^\s*\]' -and $braceLevel -eq 0) {
+                            $inRulesArray = $false
+                            break
+                        }
+                    }
+                }
+                
+                return @{ Found = $false }
+            }
+            
+            # Try to find existing rule
+            $result = Find-RuleBlock -text $content -searchDisplayName $OriginalDisplayName -searchName $rname
+            
+            if ($result.Found) {
+                Write-Host "   Replacing existing rule (lines $($result.StartLine)-$($result.EndLine))" -ForegroundColor Yellow
+                $lines = $content -split "`n"
+                # Replace the rule block
+                $beforeRule = ($lines[0..($result.StartLine-1)] -join "`n") + "`n"
+                $afterRule = "`n" + ($lines[($result.EndLine+1)..($lines.Count-1)] -join "`n")
+                return $beforeRule + $ruleObj + $afterRule
             } else {
-                # Append to the end of the rules array (assume array is var rules = [ ... ])
-                $arrayPat = '(?s)var\s*rules\s*=\s*\[(.*?)\]'
-                if ($content -match $arrayPat) {
-                    $arrayContent = $matches[1].TrimEnd()
-                    $newArray = "$arrayContent`n$ruleObj`n  ]"
-                    return $content -replace $arrayPat, "var rules = [$newArray"
+                Write-Host "   Adding new rule to array" -ForegroundColor Yellow
+                # Find the end of the rules array and insert before the closing bracket
+                if ($content -match '(?s)(.*)(\n\s*\])') {
+                    $beforeEnd = $matches[1]
+                    $endPart = $matches[2]
+                    # Check if we need a comma
+                    $needsComma = $beforeEnd -match '\}\s*$'
+                    $comma = if ($needsComma) { ',' } else { '' }
+                    return "$beforeEnd$comma`n$ruleObj$endPart"
                 }
             }
+            
             return $content
         }
         
