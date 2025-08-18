@@ -70,16 +70,17 @@ A beginner-friendly, automated system for creating and deploying Microsoft Senti
 │   ├── admin-account-anomaly.kql
 │   └── uc-powershell-encoded.kql
 └── scripts/
-    ├── generate-rule-config.ps1 # Rule generation script
-    ├── new-rule.ps1            # Interactive rule creator
-    └── validate-kql-columns.ps1 # KQL validation
+    ├── sync-sentinel-changes.ps1 # Portal-to-repo sync script
+    ├── validate-kql-columns.ps1 # KQL validation
+    ├── export_enabled_rules.ps1 # Export vendor rules
+    └── detect_drift.ps1         # Detect configuration drift
 ```
 
 ## 🔧 How It Works
 
 ### 1. Rule Creation
-- **GitHub Actions UI** - Fill out a form with rule details
-- **Automated Analysis** - Script analyzes KQL to detect entity mappings and custom details
+- **Azure Sentinel Portal** - Create rules directly in the portal (easier GUI)
+- **Manual Sync Workflow** - Run sync workflow to pull changes to repository
 - **Branch Creation** - Creates a feature branch with all changes
 - **Pull Request** - Automatically creates a PR for review
 
@@ -103,23 +104,16 @@ If you prefer to create rules manually:
 # Create KQL file
 echo "your KQL query" > kql/my-rule.kql
 
-# Generate configuration
-pwsh scripts/generate-rule-config.ps1 \
-  -KqlFile "kql/my-rule.kql" \
-  -RuleName "my-rule" \
-  -Severity "Medium" \
-  -Environment "dev" \
-  -Tactics "InitialAccess" \
-  -Techniques "T1078"
-
-# The script automatically adds the code to Bicep files
+# Create rule in Azure Sentinel portal
+# Then run manual sync workflow to pull changes to repository
 ```
 
-### Interactive Rule Creation
+### Sync from Portal
 
 ```bash
-# Run interactive creator
-pwsh scripts/new-rule.ps1
+# Run manual sync workflow from GitHub Actions
+# Go to Actions → Manual Sync from Sentinel
+# Select environment and options
 ```
 
 ## 🔍 Validation and Testing

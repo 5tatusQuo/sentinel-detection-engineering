@@ -1,0 +1,166 @@
+name: Manual Sync from Sentinel
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to sync from'
+        required: true
+        type: choice
+        options:
+          - dev
+          - prod
+        default: 'dev'
+      branch_name:
+        description: 'Branch name (leave empty for auto-generated)'
+        required: false
+        type: string
+        default: ''
+      create_new_branch:
+        description: 'Create new feature branch for review'
+        required: false
+        type: boolean
+        default: true
+      include_vendor_rules:
+        description: 'Include vendor rules in sync'
+        required: false
+        type: boolean
+        default: false
+      force_sync:
+        description: 'Force sync even if no changes detected'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+  AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+  AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+jobs:
+  manual-sync:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        fetch-depth: 0
+
+    - name: Setup PowerShell
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '7.0.x'
+
+    - name: Install Azure CLI
+      run: |
+        curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+        az --version
+
+    - name: Login to Azure
+      run: |
+        az login --service-principal \
+          --username ${{ secrets.AZURE_CLIENT_ID }} \
+          --password ${{ secrets.AZURE_CLIENT_SECRET }} \
+          --tenant ${{ secrets.AZURE_TENANT_ID }}
+        az account set --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+    - name: Generate branch name
+      id: branch-name
+      run: |
+        if [ -n "${{ inputs.branch_name }}" ]; then
+          BRANCH_NAME="${{ inputs.branch_name }}"
+        else
+          TIMESTAMP=$(date -u +'%Y%m%d-%H%M%S')
+          BRANCH_NAME="sync/${{ inputs.environment }}-$TIMESTAMP"
+        fi
+        echo "branch-name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+        echo "📝 Using branch: $BRANCH_NAME"
+
+    - name: Create or checkout branch
+      if: inputs.create_new_branch == true
+      run: |
+        git checkout -b ${{ steps.branch-name.outputs.branch-name }}
+        echo "✅ Created new branch: ${{ steps.branch-name.outputs.branch-name }}"
+
+    - name: Sync from Sentinel
+      run: |
+        echo "🔄 Starting manual sync from ${{ inputs.environment }} environment..."
+        
+        # Set environment-specific secrets
+        if [ "${{ inputs.environment }}" == "dev" ]; then
+          RG_SECRET="${{ secrets.SENTINEL_RG_DEV }}"
+          WS_SECRET="${{ secrets.SENTINEL_WS_DEV }}"
+        else
+          RG_SECRET="${{ secrets.SENTINEL_RG_PROD }}"
+          WS_SECRET="${{ secrets.SENTINEL_WS_PROD }}"
+        fi
+        
+        # Run sync script
+        pwsh -File scripts/sync-sentinel-changes.ps1 \
+          -ResourceGroup "$RG_SECRET" \
+          -WorkspaceName "$WS_SECRET" \
+          -Environment "${{ inputs.environment }}" \
+          -IncludeVendorRules ${{ inputs.include_vendor_rules }} \
+          -CreateBranch $false \
+          -ForceSync ${{ inputs.force_sync }}
+
+    - name: Check for changes
+      id: check-changes
+      run: |
+        if [ -n "$(git status --porcelain)" ]; then
+          echo "changes-detected=true" >> $GITHUB_OUTPUT
+          echo "📝 Changes detected in sync"
+          git status --porcelain
+        else
+          echo "changes-detected=false" >> $GITHUB_OUTPUT
+          echo "✅ No changes detected in sync"
+        fi
+
+    - name: Commit changes
+      if: steps.check-changes.outputs.changes-detected == 'true'
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        
+        git add .
+        git commit -m "🔄 Manual sync from ${{ inputs.environment }} - $(date -u +'%Y-%m-%d %H:%M UTC')"
+        
+        echo "✅ Successfully committed changes"
+
+    - name: Push branch
+      if: steps.check-changes.outputs.changes-detected == 'true' && inputs.create_new_branch == true
+      run: |
+        git push origin ${{ steps.branch-name.outputs.branch-name }}
+        echo "✅ Pushed new branch: ${{ steps.branch-name.outputs.branch-name }}"
+
+    - name: Create Pull Request
+      if: steps.check-changes.outputs.changes-detected == 'true' && inputs.create_new_branch == true
+      run: |
+        gh pr create \
+          --title "🔄 Sync from ${{ inputs.environment }} - $(date -u +'%Y-%m-%d')" \
+          --body "## Manual Sync from ${{ inputs.environment }} Environment
+        
+        This PR contains changes synced from the ${{ inputs.environment }} Sentinel environment.
+        
+        **Environment:** ${{ inputs.environment }}
+        **Branch:** ${{ steps.branch-name.outputs.branch-name }}
+        **Vendor Rules:** ${{ inputs.include_vendor_rules }}
+        **Timestamp:** $(date -u +'%Y-%m-%d %H:%M UTC')
+        
+        ### Changes
+        - Synced KQL queries
+        - Updated rule configurations
+        - $([ "${{ inputs.include_vendor_rules }}" == "true" ] && echo "Included vendor rules" || echo "Custom rules only")
+        
+        Please review the changes before merging." \
+          --base main \
+          --head ${{ steps.branch-name.outputs.branch-name }}
+        
+        echo "✅ Created pull request for sync changes"
+
+    - name: No changes notification
+      if: steps.check-changes.outputs.changes-detected == 'false'
+      run: |
+        echo "ℹ️ No changes detected in ${{ inputs.environment }} environment - no commit needed"

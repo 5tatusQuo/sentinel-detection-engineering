@@ -1,191 +1,156 @@
-# Sentinel Rule Review Process
-
-This document outlines the streamlined process for reviewing and updating Sentinel detection rules, including automated synchronization between the Azure Sentinel portal and repository.
+# Sentinel Detection Rule Review Process
 
 ## Overview
 
-The review process allows reviewers to make changes directly in the Azure Sentinel portal (which is easier with the GUI) and then automatically sync those changes back to the repository using our automated script.
+This document outlines the streamlined review process for Azure Sentinel detection rules using our automated sync workflows. The process is designed to leverage the ease of the Azure Sentinel portal while maintaining version control and automated deployment.
 
-## Review Workflow
+## Workflow Types
 
-### 1. Initial Rule Creation
-- Author creates a new rule using the `create-rule-pr.yml` workflow
-- Rule is automatically deployed to the dev environment
-- Pull request is created for review
+### 1. Automatic Nightly Sync (Production Only)
+- **Trigger**: Runs automatically every night at 2 AM UTC
+- **Environment**: Production only
+- **Scope**: Both custom and vendor rules
+- **Branch**: Direct commits to `main`
+- **Purpose**: Keep repository in sync with production changes
 
-### 2. Reviewer Makes Changes in Sentinel Portal
-**Why use the portal?**
-- ✅ Easier GUI for complex KQL queries
-- ✅ Visual MITRE ATT&CK mapping
-- ✅ Real-time query testing
-- ✅ Entity mapping visualization
-- ✅ Immediate validation
+### 2. Manual Sync (Development & Production)
+- **Trigger**: Manual workflow dispatch
+- **Environment**: Both DEV and PROD
+- **Scope**: Custom rules only (vendor rules optional)
+- **Branch**: Creates feature branches for review
+- **Purpose**: Sync changes made in portal back to repository for review
 
-**What can be changed:**
-- KQL query logic and filters
-- Alert severity (Low, Medium, High, Critical)
-- MITRE tactics and techniques
-- Frequency and period settings
-- Entity mappings
-- Custom details
-- Incident creation settings
-- Alert grouping configuration
+## Rule Creation Process
 
-### 3. Automated Sync Process
+### New Rules
+1. **Create in Azure Sentinel Portal** (DEV environment recommended)
+2. **Run Manual Sync Workflow**:
+   - Go to Actions → Manual Sync from Sentinel
+   - Select environment (DEV)
+   - Enable "Create new feature branch for review"
+   - Run workflow
+3. **Review Generated PR**:
+   - Review KQL queries and rule configurations
+   - Test in DEV environment
+   - Approve and merge to main
+4. **Automatic Deployment**:
+   - Merging to main triggers production deployment
+   - Rules are automatically deployed to PROD with escalated severity
 
-#### Step 1: Run the Sync Script
-```powershell
-# Sync all rules from dev environment
-.\scripts\sync-sentinel-changes.ps1 -ResourceGroup "SENTINEL_RG_DEV" -WorkspaceName "SENTINEL_WS_DEV"
+### Editing Existing Rules
+1. **Make Changes in Azure Sentinel Portal** (DEV environment)
+2. **Run Manual Sync Workflow**:
+   - Go to Actions → Manual Sync from Sentinel
+   - Select environment (DEV)
+   - Disable "Create new feature branch for review" (uses existing branch)
+   - Run workflow
+3. **Review Changes**:
+   - Review synced changes in existing branch
+   - Test modifications
+   - Commit and push changes
+4. **Deploy to Production**:
+   - Merge to main triggers production deployment
 
-# Sync specific rule only
-.\scripts\sync-sentinel-changes.ps1 -ResourceGroup "SENTINEL_RG_DEV" -WorkspaceName "SENTINEL_WS_DEV" -RuleName "test5"
+## Manual Sync Workflow Usage
 
-# Dry run to see what would change
-.\scripts\sync-sentinel-changes.ps1 -ResourceGroup "SENTINEL_RG_DEV" -WorkspaceName "SENTINEL_WS_DEV" -DryRun
-```
-
-#### Step 2: Review Changes
-The script automatically updates:
-- `kql/[rule-name].kql` - Updated KQL query
-- `env/deploy-dev.bicep` - Dev environment configuration
-- `env/deploy-prod.bicep` - Production environment configuration (with escalated severity)
-
-#### Step 3: Commit and Push
+### For New Rules
 ```bash
-git add .
-git commit -m "Sync Sentinel portal changes for [rule-name]"
-git push origin feature/[branch-name]
+# Workflow inputs:
+Environment: dev
+Create new feature branch for review: true
+Include vendor rules: false
+Force sync: false
 ```
 
-#### Step 4: Automatic Verification
-- Push triggers automatic deployment to dev
-- Verify the rule in Sentinel matches repository
-- If everything matches, the sync was successful
+### For Existing Rule Edits
+```bash
+# Workflow inputs:
+Environment: dev
+Branch name: feature/rule-name (existing branch)
+Create new feature branch for review: false
+Include vendor rules: false
+Force sync: false
+```
 
-### 4. Complete Review Process
-
-#### For Reviewers:
-1. **Review the PR** - Check initial rule configuration
-2. **Test in dev environment** - Verify rule behavior
-3. **Make portal changes** - Use Sentinel GUI for improvements
-4. **Run sync script** - `.\scripts\sync-sentinel-changes.ps1`
-5. **Commit changes** - Push updates to feature branch
-6. **Verify sync** - Automatic deployment confirms changes
-7. **Approve PR** - Once satisfied with the rule
-8. **Merge to main** - Triggers production deployment
-
-#### For Authors:
-1. **Create rule** - Use `create-rule-pr.yml` workflow
-2. **Address feedback** - Make requested changes
-3. **Collaborate with reviewer** - Work together on improvements
-4. **Final review** - Ensure rule meets requirements
-5. **Merge when approved** - Deploy to production
+### For Production Sync
+```bash
+# Workflow inputs:
+Environment: prod
+Create new feature branch for review: true
+Include vendor rules: true
+Force sync: false
+```
 
 ## Sync Script Details
 
-### What the Script Does:
-1. **Exports current rules** from Sentinel dev environment
-2. **Parses rule configuration** including KQL, severity, tactics, etc.
-3. **Updates KQL files** with current query logic
-4. **Updates Bicep files** with current alert properties
-5. **Handles environment differences** (dev vs prod severity escalation)
-6. **Maintains naming conventions** and file structure
+The `scripts/sync-sentinel-changes.ps1` script handles the automated synchronization:
 
-### Script Parameters:
-- `ResourceGroup` - Sentinel resource group name
-- `WorkspaceName` - Sentinel workspace name
-- `RuleName` - Optional: sync specific rule only
-- `DryRun` - Optional: show changes without applying
+### Key Features
+- **Environment-aware**: Automatically adjusts severity and incident creation for PROD
+- **Vendor rule filtering**: Can include/exclude vendor rules
+- **Branch management**: Supports creating new branches or updating existing ones
+- **Dry run mode**: Preview changes before applying
+- **Force sync**: Override change detection
 
-### Safety Features:
-- ✅ **Dry run mode** - Preview changes before applying
-- ✅ **Error handling** - Graceful failure with clear messages
-- ✅ **Backup creation** - Original files are preserved
-- ✅ **Validation** - Checks for required files and permissions
+### Parameters
+- `ResourceGroup`: Azure resource group name
+- `WorkspaceName`: Sentinel workspace name
+- `Environment`: "dev" or "prod" (affects rule configuration)
+- `IncludeVendorRules`: Include vendor rules in sync
+- `CreateBranch`: Create new feature branch
+- `ForceSync`: Force sync even if no changes detected
+- `DryRun`: Preview changes without applying
+
+### Environment-Specific Behavior
+- **DEV**: Uses original severity, configurable incident creation
+- **PROD**: Escalates severity (Low→Medium, Medium→High, High→Critical), always creates incidents
 
 ## Best Practices
 
-### For Reviewers:
-- **Always test in dev first** - Use the portal to experiment
-- **Use dry run mode** - Preview changes before applying
-- **Sync frequently** - Don't let portal and repo get out of sync
-- **Document changes** - Add meaningful commit messages
-- **Verify after sync** - Ensure automatic deployment succeeds
+### For Reviewers
+1. **Use DEV Environment**: Make changes in DEV environment for easier testing
+2. **Test Before Sync**: Verify rule behavior in portal before syncing
+3. **Review KQL**: Check query syntax and performance
+4. **Validate Configuration**: Ensure entity mappings and custom details are correct
+5. **Use Dry Run**: Preview changes before applying sync
 
-### For Authors:
-- **Provide clear requirements** - Specify what the rule should detect
-- **Test thoroughly** - Ensure rule works as expected
-- **Respond to feedback** - Address reviewer comments promptly
-- **Collaborate effectively** - Work with reviewers on improvements
+### For Authors
+1. **Create in Portal**: Use Azure Sentinel portal for initial rule creation
+2. **Sync Regularly**: Run manual sync after making portal changes
+3. **Review Generated Code**: Verify synced KQL and Bicep configurations
+4. **Test in DEV**: Ensure rules work correctly before production deployment
 
-### For Both:
-- **Keep changes focused** - One logical change per commit
-- **Use descriptive names** - Clear rule and file naming
-- **Follow security practices** - Proper severity and incident creation
-- **Test edge cases** - Ensure rule handles various scenarios
+### For Administrators
+1. **Monitor Nightly Sync**: Check nightly sync logs for any issues
+2. **Review Production Changes**: Monitor automatic production deployments
+3. **Backup Vendor Rules**: Use manual sync with vendor rules enabled for backups
+4. **Audit Trail**: All changes are tracked in git history
 
 ## Troubleshooting
 
-### Common Issues:
+### Common Issues
+1. **No Changes Detected**: Use `ForceSync` parameter to override
+2. **Vendor Rules Missing**: Enable `IncludeVendorRules` parameter
+3. **Branch Conflicts**: Resolve conflicts manually before pushing
+4. **Permission Errors**: Ensure proper Azure service principal permissions
 
-#### Sync Script Fails:
+### Debug Commands
 ```powershell
-# Check Azure CLI connection
-az account show
+# Test sync script locally
+.\scripts\sync-sentinel-changes.ps1 -ResourceGroup "RG" -WorkspaceName "WS" -DryRun
 
-# Verify resource group and workspace
-az sentinel workspace list --resource-group SENTINEL_RG_DEV
-
-# Check permissions
-az role assignment list --assignee [your-email] --scope /subscriptions/[sub-id]/resourceGroups/SENTINEL_RG_DEV
+# Force sync with vendor rules
+.\scripts\sync-sentinel-changes.ps1 -ResourceGroup "RG" -WorkspaceName "WS" -IncludeVendorRules $true -ForceSync $true
 ```
 
-#### KQL Query Issues:
-- Test queries in Sentinel Logs before syncing
-- Use the portal's query editor for syntax validation
-- Check for column name mismatches (IPAddress vs IpAddress)
+## Benefits
 
-#### Bicep Validation Errors:
-- Run `az bicep build` to validate syntax
-- Check for missing parameters or invalid values
-- Verify entity mapping column names exist in KQL
-
-#### Deployment Failures:
-- Check Azure resource limits and quotas
-- Verify workspace permissions
-- Review deployment logs for specific errors
-
-### Getting Help:
-1. **Check logs** - Review GitHub Actions workflow logs
-2. **Use dry run** - Preview changes before applying
-3. **Test incrementally** - Sync one rule at a time
-4. **Document issues** - Note specific error messages
-5. **Ask for assistance** - Reach out to the team
-
-## Automation Benefits
-
-### Before (Manual Process):
-- ❌ Manual file editing
-- ❌ Copy-paste from portal
-- ❌ Risk of typos and errors
-- ❌ Time-consuming sync process
-- ❌ Inconsistent formatting
-
-### After (Automated Process):
-- ✅ One-command sync
-- ✅ Consistent formatting
-- ✅ Error detection and handling
-- ✅ Dry run preview
-- ✅ Automatic environment differences
-- ✅ Version control integration
-
-## Conclusion
-
-This streamlined review process combines the best of both worlds:
-- **Easy GUI editing** in Azure Sentinel portal
-- **Automated synchronization** back to repository
-- **Version control** for all changes
-- **Automatic deployment** to dev and prod environments
+This streamlined process provides:
+- **Ease of Use**: Leverage Azure Sentinel portal's intuitive interface
+- **Version Control**: All changes tracked in git with full history
+- **Automated Deployment**: CI/CD pipeline handles deployments
+- **Review Process**: Proper code review before production deployment
+- **Environment Separation**: Clear distinction between DEV and PROD configurations
+- **Vendor Rule Management**: Automated handling of vendor rule updates
 
 The result is a more efficient, accurate, and collaborative rule development process that maintains the repository as the single source of truth while leveraging the power of the Sentinel portal interface.

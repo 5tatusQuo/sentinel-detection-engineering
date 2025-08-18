@@ -1,0 +1,89 @@
+name: Nightly Sync from Production
+
+on:
+  schedule:
+    # Run every night at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      force_sync:
+        description: 'Force sync even if no changes detected'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+  AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+  AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+jobs:
+  nightly-sync:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        fetch-depth: 0
+
+    - name: Setup PowerShell
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '7.0.x'
+
+    - name: Install Azure CLI
+      run: |
+        curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+        az --version
+
+    - name: Login to Azure
+      run: |
+        az login --service-principal \
+          --username ${{ secrets.AZURE_CLIENT_ID }} \
+          --password ${{ secrets.AZURE_CLIENT_SECRET }} \
+          --tenant ${{ secrets.AZURE_TENANT_ID }}
+        az account set --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+    - name: Sync from Production
+      run: |
+        echo "🔄 Starting nightly sync from production environment..."
+        
+        # Run sync script for production
+        pwsh -File scripts/sync-sentinel-changes.ps1 \
+          -ResourceGroup "${{ secrets.SENTINEL_RG_PROD }}" \
+          -WorkspaceName "${{ secrets.SENTINEL_WS_PROD }}" \
+          -Environment "prod" \
+          -IncludeVendorRules $true \
+          -CreateBranch $false \
+          -ForceSync ${{ inputs.force_sync || false }}
+
+    - name: Check for changes
+      id: check-changes
+      run: |
+        if [ -n "$(git status --porcelain)" ]; then
+          echo "changes-detected=true" >> $GITHUB_OUTPUT
+          echo "📝 Changes detected in production sync"
+          git status --porcelain
+        else
+          echo "changes-detected=false" >> $GITHUB_OUTPUT
+          echo "✅ No changes detected in production sync"
+        fi
+
+    - name: Commit and push changes
+      if: steps.check-changes.outputs.changes-detected == 'true'
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        
+        git add .
+        git commit -m "🔄 Nightly sync from production - $(date -u +'%Y-%m-%d %H:%M UTC')"
+        git push origin main
+        
+        echo "✅ Successfully synced and committed changes from production"
+
+    - name: No changes notification
+      if: steps.check-changes.outputs.changes-detected == 'false'
+      run: |
+        echo "ℹ️ No changes detected in production environment - no commit needed"

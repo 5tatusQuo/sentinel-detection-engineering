@@ -26,11 +26,14 @@ This directory contains PowerShell scripts that help automate Microsoft Sentinel
 **When it runs**: During validation in the deployment workflow
 
 ### `sync-sentinel-changes.ps1`
-**What it does**: Exports current Sentinel alert rules from the dev environment and automatically updates KQL and Bicep files to match the portal configuration.
+**What it does**: Exports current Sentinel alert rules and automatically updates KQL and Bicep files to match the portal configuration.
 
-**Why you need it**: Allows reviewers to make changes in the Sentinel portal (easier GUI) and then sync those changes back to the repository automatically.
+**Why you need it**: Allows reviewers to make changes in the Sentinel portal (easier GUI) and then sync those changes back to the repository automatically. Also used for nightly production sync and manual sync workflows.
 
-**When it runs**: Manually by reviewers during the review process
+**When it runs**: 
+- Manually by reviewers during the review process
+- Automatically every night for production sync
+- Via manual sync workflows for both dev and prod environments
 
 ## 🚀 How to Use These Scripts
 
@@ -82,14 +85,20 @@ pwsh scripts/validate-kql-columns.ps1 \
 
 #### Sync Sentinel Changes
 ```powershell
-# Sync all rules from dev environment
+# Sync all custom rules from dev environment
 .\scripts\sync-sentinel-changes.ps1 -ResourceGroup "SENTINEL_RG_DEV" -WorkspaceName "SENTINEL_WS_DEV"
 
 # Sync specific rule only
 .\scripts\sync-sentinel-changes.ps1 -ResourceGroup "SENTINEL_RG_DEV" -WorkspaceName "SENTINEL_WS_DEV" -RuleName "test5"
 
+# Sync from production with vendor rules
+.\scripts\sync-sentinel-changes.ps1 -ResourceGroup "SENTINEL_RG_PROD" -WorkspaceName "SENTINEL_WS_PROD" -Environment "prod" -IncludeVendorRules $true
+
 # Dry run to see what would change
 .\scripts\sync-sentinel-changes.ps1 -ResourceGroup "SENTINEL_RG_DEV" -WorkspaceName "SENTINEL_WS_DEV" -DryRun
+
+# Force sync even if no changes detected
+.\scripts\sync-sentinel-changes.ps1 -ResourceGroup "SENTINEL_RG_DEV" -WorkspaceName "SENTINEL_WS_DEV" -ForceSync $true
 ```
 
 ## 🔐 Authentication

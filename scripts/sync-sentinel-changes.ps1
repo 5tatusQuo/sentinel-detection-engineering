@@ -39,6 +39,18 @@ param(
     [string]$RuleName,
     
     [Parameter(Mandatory = $false)]
+    [string]$Environment = "dev",
+    
+    [Parameter(Mandatory = $false)]
+    [bool]$IncludeVendorRules = $false,
+    
+    [Parameter(Mandatory = $false)]
+    [bool]$CreateBranch = $true,
+    
+    [Parameter(Mandatory = $false)]
+    [bool]$ForceSync = $false,
+    
+    [Parameter(Mandatory = $false)]
     [switch]$DryRun
 )
 
@@ -48,6 +60,10 @@ $ErrorActionPreference = "Stop"
 Write-Host "🔄 Starting Sentinel to Repository Sync..." -ForegroundColor Cyan
 Write-Host "Resource Group: $ResourceGroup" -ForegroundColor Yellow
 Write-Host "Workspace: $WorkspaceName" -ForegroundColor Yellow
+Write-Host "Environment: $Environment" -ForegroundColor Yellow
+Write-Host "Include Vendor Rules: $IncludeVendorRules" -ForegroundColor Yellow
+Write-Host "Create Branch: $CreateBranch" -ForegroundColor Yellow
+Write-Host "Force Sync: $ForceSync" -ForegroundColor Yellow
 if ($RuleName) {
     Write-Host "Target Rule: $RuleName" -ForegroundColor Yellow
 }
@@ -128,19 +144,34 @@ function Update-BicepConfig {
         $devContent = Get-Content -Path $devBicepPath -Raw
         $prodContent = Get-Content -Path $prodBicepPath -Raw
         
-        # Create rule object for dev
-        $devRuleObject = @"
+        # Create rule object based on environment
+        $envPrefix = if ($Environment -eq "prod") { "[PROD]" } else { "[DEV]" }
+        $envSeverity = if ($Environment -eq "prod") {
+            # Escalate severity for prod
+            switch ($RuleConfig.severity) {
+                "Low" { "Medium" }
+                "Medium" { "High" }
+                "High" { "Critical" }
+                "Critical" { "Critical" }
+                default { "Medium" }
+            }
+        } else {
+            $RuleConfig.severity
+        }
+        $envCreateIncident = if ($Environment -eq "prod") { "true" } else { $($RuleConfig.createIncident.ToString().ToLower()) }
+        
+        $ruleObject = @"
   {
     name: '$RuleName'
-    displayName: '[DEV] [ORG] – $($RuleConfig.displayName)'
+    displayName: '$envPrefix [ORG] – $($RuleConfig.displayName)'
     kql: kql$RuleName
-    severity: '$($RuleConfig.severity)'
+    severity: '$envSeverity'
     enabled: $($RuleConfig.enabled.ToString().ToLower())
     frequency: '$($RuleConfig.queryFrequency)'
     period: '$($RuleConfig.queryPeriod)'
     tactics: [ $($RuleConfig.tactics -join ', ') ]
     techniques: [ $($RuleConfig.techniques -join ', ') ]
-    createIncident: $($RuleConfig.createIncident.ToString().ToLower())
+    createIncident: $envCreateIncident
     grouping: {
       enabled: $($RuleConfig.groupingEnabled.ToString().ToLower())
       matchingMethod: '$($RuleConfig.groupingMethod)'
@@ -156,51 +187,18 @@ function Update-BicepConfig {
   }
 "@
 
-        # Create rule object for prod (escalate severity)
-        $prodSeverity = switch ($RuleConfig.severity) {
-            "Low" { "Medium" }
-            "Medium" { "High" }
-            "High" { "Critical" }
-            "Critical" { "Critical" }
-            default { "Medium" }
+        # Update appropriate Bicep file based on environment
+        if ($Environment -eq "prod") {
+            $prodContent = $prodContent -replace "(?s)  \{\s*name: '$RuleName'.*?\n  \}", $ruleObject
+            $prodContent | Out-File -FilePath $prodBicepPath -Encoding UTF8
+            Write-Host "✅ Updated PROD Bicep file for rule: $RuleName" -ForegroundColor Green
+        } else {
+            $devContent = $devContent -replace "(?s)  \{\s*name: '$RuleName'.*?\n  \}", $ruleObject
+            $devContent | Out-File -FilePath $devBicepPath -Encoding UTF8
+            Write-Host "✅ Updated DEV Bicep file for rule: $RuleName" -ForegroundColor Green
         }
         
-        $prodRuleObject = @"
-  {
-    name: '$RuleName'
-    displayName: '[PROD] [ORG] – $($RuleConfig.displayName)'
-    kql: kql$RuleName
-    severity: '$prodSeverity'
-    enabled: $($RuleConfig.enabled.ToString().ToLower())
-    frequency: '$($RuleConfig.queryFrequency)'
-    period: '$($RuleConfig.queryPeriod)'
-    tactics: [ $($RuleConfig.tactics -join ', ') ]
-    techniques: [ $($RuleConfig.techniques -join ', ') ]
-    createIncident: true
-    grouping: {
-      enabled: $($RuleConfig.groupingEnabled.ToString().ToLower())
-      matchingMethod: '$($RuleConfig.groupingMethod)'
-    }
-    entities: {
-      ipAddress: '$($RuleConfig.entities.ipAddress)'
-      accountFullName: '$($RuleConfig.entities.accountFullName)'
-      hostName: '$($RuleConfig.entities.hostName)'
-    }
-    customDetails: {
-      $($RuleConfig.customDetails -join "`n      ")
-    }
-  }
-"@
-
-        # Update dev Bicep file
-        $devContent = $devContent -replace "(?s)  \{\s*name: '$RuleName'.*?\n  \}", $devRuleObject
-        $devContent | Out-File -FilePath $devBicepPath -Encoding UTF8
-        
-        # Update prod Bicep file
-        $prodContent = $prodContent -replace "(?s)  \{\s*name: '$RuleName'.*?\n  \}", $prodRuleObject
-        $prodContent | Out-File -FilePath $prodBicepPath -Encoding UTF8
-        
-        Write-Host "✅ Updated Bicep files for rule: $RuleName" -ForegroundColor Green
+        # Removed duplicate line
     }
     catch {
         Write-Host "❌ Failed to update Bicep files for rule: $RuleName" -ForegroundColor Red
@@ -240,6 +238,22 @@ try {
     }
     
     Write-Host "📊 Found $($rules.Count) rules in Sentinel" -ForegroundColor Green
+    
+    # Filter vendor rules if not included
+    if (!$IncludeVendorRules) {
+        $originalCount = $rules.Count
+        $rules = $rules | Where-Object { 
+            # Exclude vendor rules (typically have specific naming patterns)
+            $_.displayName -notmatch '^\[(Microsoft|Azure|Sentinel|BuiltIn|Fusion)' -and
+            $_.displayName -notmatch 'Microsoft' -and
+            $_.displayName -notmatch 'Azure' -and
+            $_.displayName -notmatch 'Sentinel'
+        }
+        $filteredCount = $rules.Count
+        Write-Host "🔍 Filtered out vendor rules: $originalCount -> $filteredCount custom rules" -ForegroundColor Yellow
+    } else {
+        Write-Host "🔍 Including all rules (custom + vendor)" -ForegroundColor Yellow
+    }
     
     # Filter by specific rule if provided
     if ($RuleName) {
