@@ -58,24 +58,24 @@ var rules = [
     customDetails: {}
   }
   {
-    name: 'uc-admin-anomaly'
+    name: 'admin-account-anomaly'
     displayName: '[PROD] [ORG] – Admin Account Anomaly Detection'
     kql: kqlAdmin
     severity: 'High'
     enabled: true
     frequency: 'PT1H'
     period: 'PT1H'
-    tactics: [ 'Persistence', 'PrivilegeEscalation', 'DefenseEvasion' ]
-    techniques: [ 'T1078' ]
-    createIncident: true
+    tactics: [ DefenseEvasion, Persistence, PrivilegeEscalation ]
+    techniques: [ T1078 ]
+    createIncident: 
     grouping: {
       enabled: true
-      matchingMethod: 'AllEntities'
+      matchingMethod: 'Selected'
     }
-    entities: {
-      accountFullName: 'UserPrincipalName'
+    entities: {}
+    customDetails: {
+      // TODO: Sync customDetails if needed
     }
-    customDetails: {}
   }
   {
     name: 'test1'
@@ -186,3 +186,4 @@ module sentinelRules '../infra/sentinel-rules.bicep' = {
 
 // Outputs
 output deployedRules array = sentinelRules.outputs.deployedRules
+
