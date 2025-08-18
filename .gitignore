@@ -48,6 +48,7 @@ deployment-outputs/
 !package.json
 !package-lock.json
 !.vscode/extensions.json
+!config/organizations.json
 
 # Test outputs
 test-results/
