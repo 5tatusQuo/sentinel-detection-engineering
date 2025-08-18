@@ -53,11 +53,6 @@ jobs:
       with:
         dotnet-version: '7.0.x'
 
-    - name: Install Azure CLI
-      run: |
-        curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
-        az --version
-
     - name: Login to Azure
       uses: azure/login@v2
       with:
@@ -76,11 +71,6 @@ jobs:
         fi
         echo "branch-name=$BRANCH_NAME" >> $GITHUB_OUTPUT
         echo "📝 Using branch: $BRANCH_NAME"
-
-    - name: Create feature branch
-      run: |
-        git checkout -b ${{ steps.branch-name.outputs.branch-name }}
-        echo "✅ Created new feature branch: ${{ steps.branch-name.outputs.branch-name }}"
 
     - name: Sync from Sentinel
       run: |
@@ -115,47 +105,35 @@ jobs:
           echo "✅ No changes detected in sync"
         fi
 
-    - name: Commit changes
+    - name: Create Pull Request if changes detected
       if: steps.check-changes.outputs.changes-detected == 'true'
-      run: |
-        git config --local user.email "action@github.com"
-        git config --local user.name "GitHub Action"
-        
-        git add .
-        git commit -m "🔄 Manual sync from ${{ inputs.environment }} - $(date -u +'%Y-%m-%d %H:%M UTC')"
-        
-        echo "✅ Successfully committed changes"
-
-    - name: Push branch
-      if: steps.check-changes.outputs.changes-detected == 'true'
-      run: |
-        git push origin ${{ steps.branch-name.outputs.branch-name }}
-        echo "✅ Pushed new branch: ${{ steps.branch-name.outputs.branch-name }}"
-
-    - name: Create Pull Request
-      if: steps.check-changes.outputs.changes-detected == 'true'
-      run: |
-        gh pr create \
-          --title "🔄 Sync from ${{ inputs.environment }} - $(date -u +'%Y-%m-%d')" \
-          --body "## Manual Sync from ${{ inputs.environment }} Environment
-        
-        This PR contains changes synced from the ${{ inputs.environment }} Sentinel environment.
-        
-        **Environment:** ${{ inputs.environment }}
-        **Branch:** ${{ steps.branch-name.outputs.branch-name }}
-        **Rule:** $([ -n "${{ inputs.rule_name }}" ] && echo "${{ inputs.rule_name }}" || echo "All custom rules")
-        **Timestamp:** $(date -u +'%Y-%m-%d %H:%M UTC')
-        
-        ### Changes
-        - Synced KQL queries
-        - Updated rule configurations
-        - Custom rules only (vendor rules excluded)
-        
-        Please review the changes before merging." \
-          --base main \
-          --head ${{ steps.branch-name.outputs.branch-name }}
-        
-        echo "✅ Created pull request for sync changes"
+      uses: peter-evans/create-pull-request@v5
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        branch: ${{ steps.branch-name.outputs.branch-name }}
+        base: main
+        title: "🔄 Manual Sync from ${{ inputs.environment }} - $(date -u +'%Y-%m-%d')"
+        body: |
+          ## Manual Sync from ${{ inputs.environment }} Environment
+          
+          This PR contains changes synced from the ${{ inputs.environment }} Sentinel environment.
+          
+          **Environment:** ${{ inputs.environment }}
+          **Branch:** ${{ steps.branch-name.outputs.branch-name }}
+          **Rule:** ${{ inputs.rule_name || 'All custom rules' }}
+          **Timestamp:** $(date -u +'%Y-%m-%d %H:%M UTC')
+          
+          ### Changes
+          - Synced KQL queries
+          - Updated rule configurations
+          - Custom rules only (vendor rules excluded)
+          
+          Please review the changes before merging.
+        commit-message: "🔄 Manual sync from ${{ inputs.environment }} - $(date -u +'%Y-%m-%d %H:%M UTC')"
+        delete-branch: true
+        add-paths: |
+          rules/
+          kql/
 
     - name: No changes notification
       if: steps.check-changes.outputs.changes-detected == 'false'

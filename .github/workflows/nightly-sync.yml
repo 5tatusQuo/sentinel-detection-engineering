@@ -38,11 +38,6 @@ jobs:
       with:
         dotnet-version: '7.0.x'
 
-    - name: Install Azure CLI
-      run: |
-        curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
-        az --version
-
     - name: Login to Azure
       uses: azure/login@v2
       with:
@@ -110,63 +105,54 @@ jobs:
           echo "✅ No custom rule changes detected"
         fi
 
-    - name: Create feature branch for custom rules
-      id: create-feature-branch
+    - name: Generate branch name for custom rules
+      id: custom-branch-name
       if: steps.check-custom-changes.outputs.custom-changes == 'true'
       run: |
         TIMESTAMP=$(date -u +'%Y%m%d-%H%M%S')
         BRANCH_NAME="nightly/custom-rules-$TIMESTAMP"
         echo "branch-name=$BRANCH_NAME" >> $GITHUB_OUTPUT
-        
-        git config --local user.email "action@github.com"
-        git config --local user.name "GitHub Action"
-        
-        git checkout -b "$BRANCH_NAME"
-        git add .
-        git commit -m "🔄 Nightly sync custom rules from production - $(date -u +'%Y-%m-%d %H:%M UTC')"
-        git push origin "$BRANCH_NAME"
-        
-        echo "✅ Created feature branch: $BRANCH_NAME"
+        echo "📝 Generated branch name: $BRANCH_NAME"
 
     - name: Create Pull Request for custom rules
       if: steps.check-custom-changes.outputs.custom-changes == 'true'
-      run: |
-        BRANCH_NAME="${{ steps.create-feature-branch.outputs.branch-name }}"
-        
-        gh pr create \
-          --title "🔄 Nightly Sync: Custom Rules from Production - $(date -u +'%Y-%m-%d')" \
-          --body "## Nightly Sync: Custom Rules Detected in Production
-        
-        ⚠️ **Custom rules found in production that are not in the repository**
-        
-        This PR contains custom rules that were detected in the production Sentinel environment during the nightly sync. These rules may have been created directly in the portal and need review.
-        
-        **Generated:** $(date -u +'%Y-%m-%d %H:%M UTC')  
-        **Branch:** $BRANCH_NAME
-        **Environment:** Production
-        
-        ### What this means
-        - Custom rules were found in production that don't exist in the repository
-        - These may be legitimate rules created by engineers or clients
-        - Or they may be unauthorized changes that need investigation
-        
-        ### Next Steps
-        1. **Review the changes** in this PR
-        2. **Verify the rules** are legitimate and authorized
-        3. **Test the rules** if needed
-        4. **Approve and merge** if the rules should be kept
-        5. **Investigate** if the rules are unauthorized
-        
-        ### Prevention
-        - Ensure all rule creation goes through the proper workflow
-        - Use the manual sync workflow for authorized portal changes
-        - Monitor production for unauthorized rule creation
-        
-        **Note:** This is an automated nightly sync. Please review and take appropriate action." \
-          --base main \
-          --head "$BRANCH_NAME"
-        
-        echo "✅ Created pull request for custom rules review"
+      uses: peter-evans/create-pull-request@v5
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        branch: ${{ steps.custom-branch-name.outputs.branch-name }}
+        base: main
+        title: "🔄 Nightly Sync: Custom Rules from Production - $(date -u +'%Y-%m-%d')"
+        body: |
+          ## Nightly Sync: Custom Rules Detected in Production
+          
+          ⚠️ **Custom rules found in production that are not in the repository**
+          
+          This PR contains custom rules that were detected in the production Sentinel environment during the nightly sync. These rules may have been created directly in the portal and need review.
+          
+          **Generated:** $(date -u +'%Y-%m-%d %H:%M UTC')  
+          **Branch:** ${{ steps.custom-branch-name.outputs.branch-name }}
+          **Environment:** Production
+          
+          ### What this means
+          - Custom rules were found in production that don't exist in the repository
+          - These may be legitimate rules created by engineers or clients
+          - Or they may be unauthorized changes that need investigation
+          
+          ### Next Steps
+          1. **Review the changes** in this PR
+          2. **Verify the rules** are legitimate and authorized
+          3. **Test the rules** if needed
+          4. **Approve and merge** if the rules should be kept
+          5. **Investigate** if the rules are unauthorized
+          
+          ### Prevention
+          - Ensure all rule creation goes through the proper workflow
+          - Use the manual sync workflow for authorized portal changes
+          - Monitor production for unauthorized rule creation
+          
+          **Note:** This is an automated nightly sync. Please review and take appropriate action.
+        commit-message: "🔄 Nightly sync custom rules from production - $(date -u +'%Y-%m-%d %H:%M UTC')"
+        delete-branch: false
 
     - name: No changes notification
       if: steps.check-vendor-changes.outputs.vendor-changes == 'false' && steps.check-custom-changes.outputs.custom-changes == 'false'
