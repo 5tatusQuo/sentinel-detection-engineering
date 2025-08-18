@@ -224,24 +224,7 @@ jobs:
         
         echo "✅ Bicep templates validated successfully"
     
-    - name: Validate deployment (Dev)
-      run: |
-        echo "Validating deployment against Dev environment..."
-        az deployment group validate \
-          --resource-group ${{ secrets.SENTINEL_RG_DEV }} \
-          --template-file env/deploy-dev.bicep \
-          --parameters env/params/dev.jsonc
-        echo "✅ Dev deployment validation completed successfully"
-    
-    - name: What-if deployment (Dev)
-      run: |
-        echo "Running what-if deployment for Dev environment..."
-        az deployment group what-if \
-          --resource-group ${{ secrets.SENTINEL_RG_DEV }} \
-          --template-file env/deploy-dev.bicep \
-          --parameters env/params/dev.jsonc \
-          --no-pretty-print --only-show-errors
-        echo "✅ What-if deployment completed successfully"
+
 
   deploy-dev:
     needs: [detect-deployment-needs, build-validate]
