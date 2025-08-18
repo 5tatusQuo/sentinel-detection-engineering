@@ -3,7 +3,7 @@
 param workspaceName string = 'sentinel-rg-dev'
 
 // Load KQL files
-var kqlExample = loadTextContent('./kql/dev/example-rule.kql')
+var kqlExample = loadTextContent('../kql/dev/example-rule.kql')
 
 // Define rules for dev environment
 var rules = [
@@ -32,7 +32,7 @@ var rules = [
 ]
 
 // Deploy rules using the main module
-module sentinelRules 'infra/sentinel-rules.bicep' = {
+module sentinelRules '../../../infra/sentinel-rules.bicep' = {
   name: 'sentinel-rules-dev'
   params: {
     workspaceName: workspaceName

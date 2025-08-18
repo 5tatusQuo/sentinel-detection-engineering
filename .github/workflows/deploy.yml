@@ -212,13 +212,8 @@ jobs:
         CHANGED_FILES="${{ needs.detect-deployment-needs.outputs.changed-files }}"
         echo "Changed files: $CHANGED_FILES"
         
-        # Always validate core templates that might be affected
-        echo "Building core templates..."
-        az bicep build --file infra/sentinel-rules.bicep
-        az bicep build --file infra/modules/scheduledRule.bicep
-        
-        # Validate environment-specific templates using configuration
-        pwsh -Command "& { . .\scripts\ConfigManager.ps1; `$enabledOrgs = Get-EnabledOrganizations; foreach (`$org in `$enabledOrgs) { foreach (`$env in @('dev', 'prod')) { if (`$org.environments.`$env.enabled) { `$paths = Get-OrganizationPaths -OrganizationName `$org.name -Environment `$env; if (Test-Path `$paths.BicepPath) { Write-Host `"Building `$(`$org.name) `$env template...`"; az bicep build --file `$paths.BicepPath } } } } }"
+        # Validate all Bicep templates using configuration
+        pwsh -File .\scripts\validate-bicep.ps1
         
         # Validate KQL files if any were changed
         if [[ "$CHANGED_FILES" == *"org*/kql/"* ]]; then

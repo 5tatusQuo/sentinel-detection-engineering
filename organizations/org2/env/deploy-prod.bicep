@@ -3,7 +3,7 @@
 param workspaceName string = 'sentinel-rg-prod'
 
 // Load KQL files
-var kqlExample = loadTextContent('./kql/prod/example-rule.kql')
+var kqlExample = loadTextContent('../kql/prod/example-rule.kql')
 
 // Define rules for prod environment (higher thresholds, create incidents)
 var rules = [
@@ -32,7 +32,7 @@ var rules = [
 ]
 
 // Deploy rules using the main module
-module sentinelRules 'infra/sentinel-rules.bicep' = {
+module sentinelRules '../../../infra/sentinel-rules.bicep' = {
   name: 'sentinel-rules-prod'
   params: {
     workspaceName: workspaceName
