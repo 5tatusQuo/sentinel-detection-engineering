@@ -96,7 +96,6 @@ jobs:
           -ResourceGroup "${{ secrets.SENTINEL_RG_PROD }}" \
           -WorkspaceName "${{ secrets.SENTINEL_WS_PROD }}" \
           -Environment "prod" \
-          -IncludeVendorRules:$false \
           -CreateBranch:$true \
           -ForceSync:${{ inputs.force_sync || false }}
 

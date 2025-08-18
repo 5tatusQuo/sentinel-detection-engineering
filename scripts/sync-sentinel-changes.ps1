@@ -42,9 +42,6 @@ param(
     [string]$Environment = "dev",
     
     [Parameter(Mandatory = $false)]
-    [bool]$IncludeVendorRules = $false,
-    
-    [Parameter(Mandatory = $false)]
     [bool]$CreateBranch = $true,
     
     [Parameter(Mandatory = $false)]
@@ -64,7 +61,6 @@ Write-Host "🔄 Starting Sentinel to Repository Sync..." -ForegroundColor Cyan
 Write-Host "Resource Group: $ResourceGroup" -ForegroundColor Yellow
 Write-Host "Workspace: $WorkspaceName" -ForegroundColor Yellow
 Write-Host "Environment: $Environment" -ForegroundColor Yellow
-Write-Host "Include Vendor Rules: $IncludeVendorRules" -ForegroundColor Yellow
 Write-Host "Create Branch: $CreateBranch" -ForegroundColor Yellow
 Write-Host "Force Sync: $ForceSync" -ForegroundColor Yellow
 Write-Host "Vendor Rules Only: $VendorRulesOnly" -ForegroundColor Yellow
@@ -255,7 +251,8 @@ try {
         }
         $filteredCount = $rules.Count
         Write-Host "🔍 Filtered to vendor rules only: $originalCount -> $filteredCount vendor rules" -ForegroundColor Yellow
-    } elseif (!$IncludeVendorRules) {
+    } else {
+        # Default: exclude vendor rules (custom rules only)
         $originalCount = $rules.Count
         $rules = $rules | Where-Object { 
             # Exclude vendor rules (typically have specific naming patterns)
@@ -266,8 +263,6 @@ try {
         }
         $filteredCount = $rules.Count
         Write-Host "🔍 Filtered out vendor rules: $originalCount -> $filteredCount custom rules" -ForegroundColor Yellow
-    } else {
-        Write-Host "🔍 Including all rules (custom + vendor)" -ForegroundColor Yellow
     }
     
     # Filter by specific rule if provided
