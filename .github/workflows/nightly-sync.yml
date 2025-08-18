@@ -46,44 +46,127 @@ jobs:
           --tenant ${{ secrets.AZURE_TENANT_ID }}
         az account set --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-    - name: Sync from Production
+    - name: Sync Vendor Rules (Direct to Main)
       run: |
-        echo "🔄 Starting nightly sync from production environment..."
+        echo "🔄 Syncing vendor rules from production (direct to main)..."
         
-        # Run sync script for production
+        # Run sync script for vendor rules only (direct to main)
         pwsh -File scripts/sync-sentinel-changes.ps1 \
           -ResourceGroup "${{ secrets.SENTINEL_RG_PROD }}" \
           -WorkspaceName "${{ secrets.SENTINEL_WS_PROD }}" \
           -Environment "prod" \
-          -IncludeVendorRules $true \
+          -VendorRulesOnly $true \
           -CreateBranch $false \
           -ForceSync ${{ inputs.force_sync || false }}
 
-    - name: Check for changes
-      id: check-changes
+    - name: Check for vendor rule changes
+      id: check-vendor-changes
       run: |
         if [ -n "$(git status --porcelain)" ]; then
-          echo "changes-detected=true" >> $GITHUB_OUTPUT
-          echo "📝 Changes detected in production sync"
+          echo "vendor-changes=true" >> $GITHUB_OUTPUT
+          echo "📝 Vendor rule changes detected"
           git status --porcelain
         else
-          echo "changes-detected=false" >> $GITHUB_OUTPUT
-          echo "✅ No changes detected in production sync"
+          echo "vendor-changes=false" >> $GITHUB_OUTPUT
+          echo "✅ No vendor rule changes detected"
         fi
 
-    - name: Commit and push changes
-      if: steps.check-changes.outputs.changes-detected == 'true'
+    - name: Commit vendor rule changes to main
+      if: steps.check-vendor-changes.outputs.vendor-changes == 'true'
       run: |
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
         
         git add .
-        git commit -m "🔄 Nightly sync from production - $(date -u +'%Y-%m-%d %H:%M UTC')"
+        git commit -m "🔄 Nightly sync vendor rules from production - $(date -u +'%Y-%m-%d %H:%M UTC')"
         git push origin main
         
-        echo "✅ Successfully synced and committed changes from production"
+        echo "✅ Successfully synced vendor rules to main"
+
+    - name: Sync Custom Rules (Feature Branch/PR)
+      run: |
+        echo "🔄 Checking for custom rules in production that need review..."
+        
+        # Run sync script for custom rules only (will create feature branch if changes found)
+        pwsh -File scripts/sync-sentinel-changes.ps1 \
+          -ResourceGroup "${{ secrets.SENTINEL_RG_PROD }}" \
+          -WorkspaceName "${{ secrets.SENTINEL_WS_PROD }}" \
+          -Environment "prod" \
+          -IncludeVendorRules $false \
+          -CreateBranch $true \
+          -ForceSync ${{ inputs.force_sync || false }}
+
+    - name: Check for custom rule changes
+      id: check-custom-changes
+      run: |
+        if [ -n "$(git status --porcelain)" ]; then
+          echo "custom-changes=true" >> $GITHUB_OUTPUT
+          echo "📝 Custom rule changes detected - will create feature branch"
+          git status --porcelain
+        else
+          echo "custom-changes=false" >> $GITHUB_OUTPUT
+          echo "✅ No custom rule changes detected"
+        fi
+
+    - name: Create feature branch for custom rules
+      id: create-feature-branch
+      if: steps.check-custom-changes.outputs.custom-changes == 'true'
+      run: |
+        TIMESTAMP=$(date -u +'%Y%m%d-%H%M%S')
+        BRANCH_NAME="nightly/custom-rules-$TIMESTAMP"
+        echo "branch-name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+        
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        
+        git checkout -b "$BRANCH_NAME"
+        git add .
+        git commit -m "🔄 Nightly sync custom rules from production - $(date -u +'%Y-%m-%d %H:%M UTC')"
+        git push origin "$BRANCH_NAME"
+        
+        echo "✅ Created feature branch: $BRANCH_NAME"
+
+    - name: Create Pull Request for custom rules
+      if: steps.check-custom-changes.outputs.custom-changes == 'true'
+      run: |
+        BRANCH_NAME="${{ steps.create-feature-branch.outputs.branch-name }}"
+        
+        gh pr create \
+          --title "🔄 Nightly Sync: Custom Rules from Production - $(date -u +'%Y-%m-%d')" \
+          --body "## Nightly Sync: Custom Rules Detected in Production
+        
+        ⚠️ **Custom rules found in production that are not in the repository**
+        
+        This PR contains custom rules that were detected in the production Sentinel environment during the nightly sync. These rules may have been created directly in the portal and need review.
+        
+        **Generated:** $(date -u +'%Y-%m-%d %H:%M UTC')  
+        **Branch:** $BRANCH_NAME
+        **Environment:** Production
+        
+        ### What this means
+        - Custom rules were found in production that don't exist in the repository
+        - These may be legitimate rules created by engineers or clients
+        - Or they may be unauthorized changes that need investigation
+        
+        ### Next Steps
+        1. **Review the changes** in this PR
+        2. **Verify the rules** are legitimate and authorized
+        3. **Test the rules** if needed
+        4. **Approve and merge** if the rules should be kept
+        5. **Investigate** if the rules are unauthorized
+        
+        ### Prevention
+        - Ensure all rule creation goes through the proper workflow
+        - Use the manual sync workflow for authorized portal changes
+        - Monitor production for unauthorized rule creation
+        
+        **Note:** This is an automated nightly sync. Please review and take appropriate action." \
+          --base main \
+          --head "$BRANCH_NAME"
+        
+        echo "✅ Created pull request for custom rules review"
 
     - name: No changes notification
-      if: steps.check-changes.outputs.changes-detected == 'false'
+      if: steps.check-vendor-changes.outputs.vendor-changes == 'false' && steps.check-custom-changes.outputs.custom-changes == 'false'
       run: |
-        echo "ℹ️ No changes detected in production environment - no commit needed"
+        echo "ℹ️ No changes detected in production environment - no sync needed"

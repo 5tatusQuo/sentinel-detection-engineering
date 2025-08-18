@@ -16,16 +16,11 @@ on:
         required: false
         type: string
         default: ''
-      create_new_branch:
-        description: 'Create new feature branch for review'
+      rule_name:
+        description: 'Specific rule name to sync (leave empty for all custom rules)'
         required: false
-        type: boolean
-        default: true
-      include_vendor_rules:
-        description: 'Include vendor rules in sync'
-        required: false
-        type: boolean
-        default: false
+        type: string
+        default: ''
       force_sync:
         description: 'Force sync even if no changes detected'
         required: false
@@ -78,11 +73,10 @@ jobs:
         echo "branch-name=$BRANCH_NAME" >> $GITHUB_OUTPUT
         echo "📝 Using branch: $BRANCH_NAME"
 
-    - name: Create or checkout branch
-      if: inputs.create_new_branch == true
+    - name: Create feature branch
       run: |
         git checkout -b ${{ steps.branch-name.outputs.branch-name }}
-        echo "✅ Created new branch: ${{ steps.branch-name.outputs.branch-name }}"
+        echo "✅ Created new feature branch: ${{ steps.branch-name.outputs.branch-name }}"
 
     - name: Sync from Sentinel
       run: |
@@ -102,9 +96,10 @@ jobs:
           -ResourceGroup "$RG_SECRET" \
           -WorkspaceName "$WS_SECRET" \
           -Environment "${{ inputs.environment }}" \
-          -IncludeVendorRules ${{ inputs.include_vendor_rules }} \
+          -IncludeVendorRules $false \
           -CreateBranch $false \
-          -ForceSync ${{ inputs.force_sync }}
+          -ForceSync ${{ inputs.force_sync }} \
+          -RuleName "${{ inputs.rule_name }}"
 
     - name: Check for changes
       id: check-changes
@@ -130,13 +125,13 @@ jobs:
         echo "✅ Successfully committed changes"
 
     - name: Push branch
-      if: steps.check-changes.outputs.changes-detected == 'true' && inputs.create_new_branch == true
+      if: steps.check-changes.outputs.changes-detected == 'true'
       run: |
         git push origin ${{ steps.branch-name.outputs.branch-name }}
         echo "✅ Pushed new branch: ${{ steps.branch-name.outputs.branch-name }}"
 
     - name: Create Pull Request
-      if: steps.check-changes.outputs.changes-detected == 'true' && inputs.create_new_branch == true
+      if: steps.check-changes.outputs.changes-detected == 'true'
       run: |
         gh pr create \
           --title "🔄 Sync from ${{ inputs.environment }} - $(date -u +'%Y-%m-%d')" \
@@ -146,13 +141,13 @@ jobs:
         
         **Environment:** ${{ inputs.environment }}
         **Branch:** ${{ steps.branch-name.outputs.branch-name }}
-        **Vendor Rules:** ${{ inputs.include_vendor_rules }}
+        **Rule:** $([ -n "${{ inputs.rule_name }}" ] && echo "${{ inputs.rule_name }}" || echo "All custom rules")
         **Timestamp:** $(date -u +'%Y-%m-%d %H:%M UTC')
         
         ### Changes
         - Synced KQL queries
         - Updated rule configurations
-        - $([ "${{ inputs.include_vendor_rules }}" == "true" ] && echo "Included vendor rules" || echo "Custom rules only")
+        - Custom rules only (vendor rules excluded)
         
         Please review the changes before merging." \
           --base main \

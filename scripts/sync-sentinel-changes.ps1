@@ -51,6 +51,9 @@ param(
     [bool]$ForceSync = $false,
     
     [Parameter(Mandatory = $false)]
+    [bool]$VendorRulesOnly = $false,
+    
+    [Parameter(Mandatory = $false)]
     [switch]$DryRun
 )
 
@@ -64,6 +67,7 @@ Write-Host "Environment: $Environment" -ForegroundColor Yellow
 Write-Host "Include Vendor Rules: $IncludeVendorRules" -ForegroundColor Yellow
 Write-Host "Create Branch: $CreateBranch" -ForegroundColor Yellow
 Write-Host "Force Sync: $ForceSync" -ForegroundColor Yellow
+Write-Host "Vendor Rules Only: $VendorRulesOnly" -ForegroundColor Yellow
 if ($RuleName) {
     Write-Host "Target Rule: $RuleName" -ForegroundColor Yellow
 }
@@ -239,8 +243,19 @@ try {
     
     Write-Host "📊 Found $($rules.Count) rules in Sentinel" -ForegroundColor Green
     
-    # Filter vendor rules if not included
-    if (!$IncludeVendorRules) {
+    # Filter rules based on parameters
+    if ($VendorRulesOnly) {
+        $originalCount = $rules.Count
+        $rules = $rules | Where-Object { 
+            # Include only vendor rules (typically have specific naming patterns)
+            $_.displayName -match '^\[(Microsoft|Azure|Sentinel|BuiltIn|Fusion)' -or
+            $_.displayName -match 'Microsoft' -or
+            $_.displayName -match 'Azure' -or
+            $_.displayName -match 'Sentinel'
+        }
+        $filteredCount = $rules.Count
+        Write-Host "🔍 Filtered to vendor rules only: $originalCount -> $filteredCount vendor rules" -ForegroundColor Yellow
+    } elseif (!$IncludeVendorRules) {
         $originalCount = $rules.Count
         $rules = $rules | Where-Object { 
             # Exclude vendor rules (typically have specific naming patterns)
