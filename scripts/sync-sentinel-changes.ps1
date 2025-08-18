@@ -671,17 +671,65 @@ try {
         if (-not (Test-Path $bicepPath)) { return $null }
         $content = Get-Content -Path $bicepPath -Raw
 
-        # Try to find rule block by exact displayName first
-        $escDisplay = [regex]::Escape($displayName)
+        # Use the same brace-counting approach as deletion logic for consistency
+        $lines = $content -split "`n"
+        $inRulesArray = $false
+        $inRuleBlock = $false
+        $braceLevel = 0
+        $ruleStartLine = -1
+        $ruleEndLine = -1
+        $currentRule = ""
         $block = $null
-        $patDisplay = "(?s)\{\s*name:\s*'[^']*'\s*displayName:\s*'$escDisplay'.*?\n\s*\}"
-        if ($content -match $patDisplay) {
-            $block = $matches[0]
-        } else {
-            # Fallback: try by internal name (the repo 'name' field is not the cleanName; prefer displayName)
-            $patName = "(?s)\{\s*name:\s*'" + [regex]::Escape($cleanName) + "'\b.*?\n\s*\}"
-            if ($content -match $patName) { $block = $matches[0] }
+        
+        for ($i = 0; $i -lt $lines.Count; $i++) {
+            $line = $lines[$i]
+            
+            # Track if we're in the rules array
+            if ($line -match 'var\s+rules\s*=\s*\[') {
+                $inRulesArray = $true
+                continue
+            }
+            
+            if ($inRulesArray) {
+                # Count braces to track nesting
+                $openBraces = ($line -split '\{').Length - 1
+                $closeBraces = ($line -split '\}').Length - 1
+                $braceLevel += $openBraces - $closeBraces
+                
+                # Start of a rule block
+                if ($line -match '^\s*\{' -and $braceLevel -eq 1 -and -not $inRuleBlock) {
+                    $inRuleBlock = $true
+                    $ruleStartLine = $i
+                    $currentRule = ""
+                }
+                
+                if ($inRuleBlock) {
+                    $currentRule += $line + "`n"
+                    
+                    # End of rule block
+                    if ($braceLevel -eq 0) {
+                        $ruleEndLine = $i
+                        $inRuleBlock = $false
+                        
+                        # Check if this is the rule we're looking for
+                        $escDisplay = [regex]::Escape($displayName)
+                        if (($currentRule -match [regex]::Escape($displayName)) -or
+                            ($currentRule -match "name:\s*'$([regex]::Escape($cleanName))'")) {
+                            $block = $currentRule.TrimEnd("`n")
+                            break
+                        }
+                        $currentRule = ""
+                    }
+                }
+                
+                # End of rules array
+                if ($line -match '^\s*\]' -and $braceLevel -eq 0) {
+                    $inRulesArray = $false
+                    break
+                }
+            }
         }
+        
         if (-not $block) { return $null }
         function m($r) { if ($block -match $r) { return $matches[1] } else { return '' } }
         function parseList($r) {
@@ -711,25 +759,41 @@ try {
                 $groupingMap[$key] = $val
             }
         }
-        # Entities block -> parse all key:'value' pairs using more robust approach
+        # Entities block -> extract using proper brace matching
         $entitiesMap = @{}
-        # Find all key: 'value' patterns directly in the rule block, filtering for entities section
-        $allMatches = [regex]::Matches($block, "([A-Za-z0-9_]+):\s*'([^']*)'")
-        $inEntitiesSection = $false
-        $blockLines = $block -split "`n"
         
-        for ($i = 0; $i -lt $blockLines.Count; $i++) {
-            $line = $blockLines[$i].Trim()
-            if ($line -match '^entities:\s*\{') {
-                $inEntitiesSection = $true
-                continue
-            }
-            if ($inEntitiesSection -and $line -match '^\}') {
-                $inEntitiesSection = $false
-                continue  
-            }
-            if ($inEntitiesSection -and $line -match "([A-Za-z0-9_]+):\s*'([^']*)'") {
-                $entitiesMap[$matches[1]] = $matches[2]
+        # Find the start of entities block
+        if ($block -match "entities:\s*\{") {
+            $entitiesStart = $block.IndexOf($matches[0])
+            if ($entitiesStart -ge 0) {
+                # Find the matching closing brace for entities
+                $substring = $block.Substring($entitiesStart)
+                $braceCount = 0
+                $entitiesEnd = -1
+                $foundStart = $false
+                
+                for ($i = 0; $i -lt $substring.Length; $i++) {
+                    $char = $substring[$i]
+                    if ($char -eq '{') {
+                        $braceCount++
+                        $foundStart = $true
+                    } elseif ($char -eq '}') {
+                        $braceCount--
+                        if ($foundStart -and $braceCount -eq 0) {
+                            $entitiesEnd = $i
+                            break
+                        }
+                    }
+                }
+                
+                if ($entitiesEnd -gt 0) {
+                    $entitiesContent = $substring.Substring(0, $entitiesEnd + 1)
+                    # Extract key: 'value' pairs from the entities content
+                    $entityMatches = [regex]::Matches($entitiesContent, "([A-Za-z0-9_]+):\s*'([^']*)'")
+                    foreach ($match in $entityMatches) {
+                        $entitiesMap[$match.Groups[1].Value] = $match.Groups[2].Value
+                    }
+                }
             }
         }
         $tacticsArr    = parseList "tactics:\s*\[([^\]]*)\]"
