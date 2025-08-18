@@ -218,21 +218,7 @@ jobs:
         az bicep build --file infra/modules/scheduledRule.bicep
         
         # Validate environment-specific templates using configuration
-        pwsh -Command "
-          . .\scripts\ConfigManager.ps1
-          `$enabledOrgs = Get-EnabledOrganizations
-          foreach (`$org in `$enabledOrgs) {
-            foreach (`$env in @('dev', 'prod')) {
-              if (`$org.environments.`$env.enabled) {
-                `$paths = Get-OrganizationPaths -OrganizationName `$org.name -Environment `$env
-                if (Test-Path `$paths.BicepPath) {
-                  Write-Host `"Building `$(`$org.name) `$env template...`"
-                  az bicep build --file `$paths.BicepPath
-                }
-              }
-            }
-          }
-        "
+        pwsh -Command "& { . .\scripts\ConfigManager.ps1; `$enabledOrgs = Get-EnabledOrganizations; foreach (`$org in `$enabledOrgs) { foreach (`$env in @('dev', 'prod')) { if (`$org.environments.`$env.enabled) { `$paths = Get-OrganizationPaths -OrganizationName `$org.name -Environment `$env; if (Test-Path `$paths.BicepPath) { Write-Host `"Building `$(`$org.name) `$env template...`"; az bicep build --file `$paths.BicepPath } } } } }"
         
         # Validate KQL files if any were changed
         if [[ "$CHANGED_FILES" == *"org*/kql/"* ]]; then
@@ -305,23 +291,7 @@ jobs:
         echo "Deploying all organizations to Dev environment..."
         if [ "${{ needs.detect-deployment-needs.outputs.needs-deployment }}" == "true" ]; then
           # Deploy using configuration system
-          pwsh -Command "
-            . .\scripts\ConfigManager.ps1
-            `$enabledOrgs = Get-EnabledOrganizations -Environment 'dev'
-            foreach (`$org in `$enabledOrgs) {
-              `$env = Get-OrganizationEnvironment -OrganizationName `$org.name -Environment 'dev'
-              `$paths = Get-OrganizationPaths -OrganizationName `$org.name -Environment 'dev'
-              
-              Write-Host `"Deploying `$(`$org.name) to Dev environment...`"
-              
-              if (Test-Path `$paths.BicepPath) {
-                az deployment group create --resource-group `$env.resourceGroup --template-file `$paths.BicepPath --verbose
-                Write-Host `"✅ `$(`$org.name) Dev deployment completed successfully`"
-              } else {
-                Write-Host `"⚠️ No dev Bicep file found for `$(`$org.name) - skipping`"
-              }
-            }
-          "
+          pwsh -Command "& { . .\scripts\ConfigManager.ps1; `$enabledOrgs = Get-EnabledOrganizations -Environment 'dev'; foreach (`$org in `$enabledOrgs) { `$env = Get-OrganizationEnvironment -OrganizationName `$org.name -Environment 'dev'; `$paths = Get-OrganizationPaths -OrganizationName `$org.name -Environment 'dev'; Write-Host `"Deploying `$(`$org.name) to Dev environment...`"; if (Test-Path `$paths.BicepPath) { az deployment group create --resource-group `$env.resourceGroup --template-file `$paths.BicepPath --verbose; Write-Host `"✅ `$(`$org.name) Dev deployment completed successfully`" } else { Write-Host `"⚠️ No dev Bicep file found for `$(`$org.name) - skipping`" } } }"
         else
           echo "No deployment needed - skipping"
         fi
@@ -367,23 +337,7 @@ jobs:
         echo "Deploying all organizations to Production environment..."
         if [ "${{ needs.detect-deployment-needs.outputs.needs-deployment }}" == "true" ]; then
           # Deploy using configuration system
-          pwsh -Command "
-            . .\scripts\ConfigManager.ps1
-            `$enabledOrgs = Get-EnabledOrganizations -Environment 'prod'
-            foreach (`$org in `$enabledOrgs) {
-              `$env = Get-OrganizationEnvironment -OrganizationName `$org.name -Environment 'prod'
-              `$paths = Get-OrganizationPaths -OrganizationName `$org.name -Environment 'prod'
-              
-              Write-Host `"Deploying `$(`$org.name) to Production environment...`"
-              
-              if (Test-Path `$paths.BicepPath) {
-                az deployment group create --resource-group `$env.resourceGroup --template-file `$paths.BicepPath --verbose
-                Write-Host `"✅ `$(`$org.name) Production deployment completed successfully`"
-              } else {
-                Write-Host `"⚠️ No prod Bicep file found for `$(`$org.name) - skipping`"
-              }
-            }
-          "
+          pwsh -Command "& { . .\scripts\ConfigManager.ps1; `$enabledOrgs = Get-EnabledOrganizations -Environment 'prod'; foreach (`$org in `$enabledOrgs) { `$env = Get-OrganizationEnvironment -OrganizationName `$org.name -Environment 'prod'; `$paths = Get-OrganizationPaths -OrganizationName `$org.name -Environment 'prod'; Write-Host `"Deploying `$(`$org.name) to Production environment...`"; if (Test-Path `$paths.BicepPath) { az deployment group create --resource-group `$env.resourceGroup --template-file `$paths.BicepPath --verbose; Write-Host `"✅ `$(`$org.name) Production deployment completed successfully`" } else { Write-Host `"⚠️ No prod Bicep file found for `$(`$org.name) - skipping`" } } }"
         else
           echo "No deployment needed - skipping"
         fi

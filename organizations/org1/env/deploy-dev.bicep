@@ -3,21 +3,20 @@
 param workspaceName string = 'sentinel-rg-dev'
 
 // Load KQL files
-var kqladminaccountanomalydetectiont1078 = loadTextContent('./kql/dev/admin-account-anomaly-detection-(t1078).kql')
-var kqladminaccountanomalydetection = loadTextContent('./kql/dev/admin-account-anomaly-detection.kql')
-var kqlsuspiciousloginattemptst1078 = loadTextContent('./kql/dev/suspicious-login-attempts-(t1078).kql')
-var kqlsuspiciousloginattempts = loadTextContent('./kql/dev/suspicious-login-attempts.kql')
-var kqlsuspiciouspowershellencodedcommand = loadTextContent('./kql/dev/suspicious-powershell-(encodedcommand).kql')
-var kqltestautomatedrule = loadTextContent('./kql/dev/test-automated-rule.kql')
-var kqltest1 = loadTextContent('./kql/dev/test1.kql')
-var kqltest2 = loadTextContent('./kql/dev/test2.kql')
-var kqltest3 = loadTextContent('./kql/dev/test3.kql')
-var kqltest4 = loadTextContent('./kql/dev/test4.kql')
-var kqltest5 = loadTextContent('./kql/dev/test5.kql')
+var kqladminaccountanomalydetectiont1078 = loadTextContent('../kql/dev/admin-account-anomaly-detection-(t1078).kql')
+var kqladminaccountanomalydetection = loadTextContent('../kql/dev/admin-account-anomaly-detection.kql')
+var kqlsuspiciousloginattemptst1078 = loadTextContent('../kql/dev/suspicious-login-attempts-(t1078).kql')
+var kqlsuspiciousloginattempts = loadTextContent('../kql/dev/suspicious-login-attempts.kql')
+var kqlsuspiciouspowershellencodedcommand = loadTextContent('../kql/dev/suspicious-powershell-(encodedcommand).kql')
+var kqltestautomatedrule = loadTextContent('../kql/dev/test-automated-rule.kql')
+var kqltest1 = loadTextContent('../kql/dev/test1.kql')
+var kqltest2 = loadTextContent('../kql/dev/test2.kql')
+var kqltest3 = loadTextContent('../kql/dev/test3.kql')
+var kqltest4 = loadTextContent('../kql/dev/test4.kql')
+var kqltest5 = loadTextContent('../kql/dev/test5.kql')
 
 // Define rules for dev environment
 var rules = [
-  // Rules will be populated by sync script
   {
     name: 'admin-account-anomaly-detection'
     displayName: '[DEV] [ORG] – Admin Account Anomaly Detection'
@@ -39,8 +38,7 @@ var rules = [
     customDetails: {
       // TODO: Sync customDetails if needed
     }
-  }
-  {
+  }, {
     name: 'suspicious-login-attempts'
     displayName: '[DEV] [ORG] – Suspicious Login Attempts'
     kql: kqlsuspiciousloginattempts
@@ -61,8 +59,7 @@ var rules = [
     customDetails: {
       // TODO: Sync customDetails if needed
     }
-  }
-  {
+  }, {
     name: 'suspicious-powershell-(encodedcommand)'
     displayName: '[DEV] [ORG] – Suspicious PowerShell (EncodedCommand)'
     kql: kqlsuspiciouspowershellencodedcommand
@@ -84,8 +81,7 @@ var rules = [
     customDetails: {
       // TODO: Sync customDetails if needed
     }
-  },
-  {
+  }, {
     name: 'test-automated-rule'
     displayName: '[DEV] [ORG] – Test Automated Rule'
     kql: kqltestautomatedrule
@@ -108,8 +104,7 @@ var rules = [
     customDetails: {
       // TODO: Sync customDetails if needed
     }
-  },
-  {
+  }, {
     name: 'test1'
     displayName: '[DEV] [ORG] – Test1'
     kql: kqltest1
@@ -131,8 +126,7 @@ var rules = [
     customDetails: {
       // TODO: Sync customDetails if needed
     }
-  },
-  {
+  }, {
     name: 'test2'
     displayName: '[DEV] [ORG] – Test2'
     kql: kqltest2
@@ -155,8 +149,7 @@ var rules = [
     customDetails: {
       // TODO: Sync customDetails if needed
     }
-  },
-  {
+  }, {
     name: 'test3'
     displayName: '[DEV] [ORG] – Test3'
     kql: kqltest3
@@ -179,8 +172,7 @@ var rules = [
     customDetails: {
       // TODO: Sync customDetails if needed
     }
-  },
-  {
+  }, {
     name: 'test4'
     displayName: '[DEV] [ORG] – Test4'
     kql: kqltest4
@@ -203,8 +195,7 @@ var rules = [
     customDetails: {
       // TODO: Sync customDetails if needed
     }
-  },
-  {
+  }, {
     name: 'test5'
     displayName: '[DEV] [ORG] – Test5'
     kql: kqltest5
@@ -229,3 +220,15 @@ var rules = [
     }
   }
 ]
+
+// Deploy using the main template
+module sentinelRules '../../../infra/sentinel-rules.bicep' = {
+  name: 'sentinel-rules-dev'
+  params: {
+    workspaceName: workspaceName
+    rules: rules
+  }
+}
+
+// Outputs
+output deployedRules array = sentinelRules.outputs.deployedRules
