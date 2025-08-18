@@ -3,10 +3,6 @@
 param workspaceName string = 'sentinel-rg-dev'
 
 // Load KQL files
-var kqladminaccountanomalydetection = loadTextContent('../kql/dev/admin-account-anomaly-detection.kql')
-var kqlsuspiciousloginattempts = loadTextContent('../kql/dev/suspicious-login-attempts.kql')
-var kqlsuspiciouspowershellencodedcommand = loadTextContent('../kql/dev/suspicious-powershell-(encodedcommand).kql')
-var kqltestautomatedrule = loadTextContent('../kql/dev/test-automated-rule.kql')
 var kqltest1 = loadTextContent('../kql/dev/test1.kql')
 var kqltest2 = loadTextContent('../kql/dev/test2.kql')
 var kqltest3 = loadTextContent('../kql/dev/test3.kql')
