@@ -216,9 +216,13 @@ function Update-BicepConfig {
         $groupingBlock = "    grouping: {}`n"
     }
     
-    # Build tactics and techniques using portal values
-    $tacticsStr = if ($PortalCanon.tactics -and $PortalCanon.tactics.Count -gt 0) { $PortalCanon.tactics -join ', ' } else { '' }
-    $techniquesStr = if ($envTechniques -and $envTechniques.Count -gt 0) { $envTechniques -join ', ' } else { '' }
+    # Build tactics and techniques using portal values (properly quoted for Bicep)
+    $tacticsStr = if ($PortalCanon.tactics -and $PortalCanon.tactics.Count -gt 0) { 
+        ($PortalCanon.tactics | ForEach-Object { "'$_'" }) -join ', ' 
+    } else { '' }
+    $techniquesStr = if ($envTechniques -and $envTechniques.Count -gt 0) { 
+        ($envTechniques | ForEach-Object { "'$_'" }) -join ', ' 
+    } else { '' }
     
     $ruleObject = @"
   {
@@ -231,7 +235,7 @@ function Update-BicepConfig {
     period: '$($PortalCanon.period)'
     tactics: [ $tacticsStr ]
     techniques: [ $techniquesStr ]
-    createIncident: $envCreateIncident
+    createIncident: $(if ($envCreateIncident) { $envCreateIncident } else { 'true' })
 $groupingBlock$entitiesBlock    customDetails: {
       // TODO: Sync customDetails if needed
     }

@@ -65,9 +65,9 @@ var rules = [
     enabled: true
     frequency: 'PT1H'
     period: 'PT1H'
-    tactics: [ DefenseEvasion, Persistence, PrivilegeEscalation ]
-    techniques: [ T1078 ]
-    createIncident: 
+    tactics: [ 'DefenseEvasion', 'Persistence', 'PrivilegeEscalation' ]
+    techniques: [ 'T1078' ]
+    createIncident: true 
     grouping: {
       enabled: true
       matchingMethod: 'Selected'
