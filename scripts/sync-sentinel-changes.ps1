@@ -92,6 +92,158 @@ function Get-RuleNameFromDisplay {
     return $ruleName
 }
 
+# Function to find rules that exist in repo but not in portal (deleted rules)
+function Find-DeletedRules {
+    param(
+        [array]$portalRules,
+        [string]$env
+    )
+    
+    $bicepPath = if ($env -eq 'prod') { 'env/deploy-prod.bicep' } else { 'env/deploy-dev.bicep' }
+    if (-not (Test-Path $bicepPath)) { return @() }
+    
+    $content = Get-Content -Path $bicepPath -Raw
+    $deletedRules = @()
+    
+    # Extract all rules from bicep file
+    $lines = $content -split "`n"
+    $inRulesArray = $false
+    $inRuleBlock = $false
+    $braceLevel = 0
+    $currentRule = ""
+    
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        $line = $lines[$i]
+        
+        if ($line -match 'var\s+rules\s*=\s*\[') {
+            $inRulesArray = $true
+            continue
+        }
+        
+        if ($inRulesArray) {
+            $openBraces = ($line -split '\{').Length - 1
+            $closeBraces = ($line -split '\}').Length - 1
+            $braceLevel += $openBraces - $closeBraces
+            
+            if ($line -match '^\s*\{' -and $braceLevel -eq 1 -and -not $inRuleBlock) {
+                $inRuleBlock = $true
+                $currentRule = ""
+            }
+            
+            if ($inRuleBlock) {
+                $currentRule += $line + "`n"
+                
+                if ($braceLevel -eq 0) {
+                    $inRuleBlock = $false
+                    
+                    # Extract rule info from bicep block
+                    if ($currentRule -match "name:\s*'([^']*)'") { $ruleName = $matches[1] }
+                    if ($currentRule -match "displayName:\s*'([^']*)'") { $displayName = $matches[1] }
+                    
+                    # Check if this rule still exists in portal
+                    $portalMatch = $portalRules | Where-Object { 
+                        $_.displayName -eq $displayName -or 
+                        (Get-RuleNameFromDisplay -DisplayName $_.displayName) -eq $ruleName
+                    }
+                    
+                    if (-not $portalMatch -and $displayName) {
+                        $deletedRules += [PSCustomObject]@{
+                            Name = $ruleName
+                            DisplayName = $displayName
+                            BicepBlock = $currentRule.TrimEnd("`n")
+                        }
+                    }
+                    $currentRule = ""
+                }
+            }
+            
+            if ($line -match '^\s*\]' -and $braceLevel -eq 0) {
+                $inRulesArray = $false
+                break
+            }
+        }
+    }
+    
+    return $deletedRules
+}
+
+# Function to remove rule from bicep file
+function Remove-RuleFromBicep {
+    param(
+        [string]$ruleName,
+        [string]$displayName,
+        [string]$env
+    )
+    
+    $bicepPath = if ($env -eq 'prod') { 'env/deploy-prod.bicep' } else { 'env/deploy-dev.bicep' }
+    if (-not (Test-Path $bicepPath)) { return }
+    
+    $content = Get-Content -Path $bicepPath -Raw
+    
+    # Find and remove the rule block by displayName first, then by name
+    $escDisplayName = [regex]::Escape($displayName)
+    $displayPat = "(?s)\{\s*name:\s*'[^']*'[^}]*displayName:\s*'$escDisplayName'[^}]*\}(?:\s*\})*(,?)"
+    
+    if ($content -match $displayPat) {
+        $content = $content -replace $displayPat, ''
+        # Clean up any double commas or trailing commas
+        $content = $content -replace ',\s*,', ','
+        $content = $content -replace ',(\s*\])', '$1'
+    } else {
+        # Fallback to rule name
+        $escName = [regex]::Escape($ruleName)
+        $namePat = "(?s)\{\s*name:\s*'$escName'[^}]*\}(?:\s*\})*(,?)"
+        if ($content -match $namePat) {
+            $content = $content -replace $namePat, ''
+            $content = $content -replace ',\s*,', ','
+            $content = $content -replace ',(\s*\])', '$1'
+        }
+    }
+    
+    $content | Out-File -FilePath $bicepPath -Encoding UTF8
+    Write-Host "🗑️  Removed rule from $bicepPath" -ForegroundColor Red
+}
+
+# Function to remove unused KQL file and variable
+function Remove-UnusedKqlFile {
+    param([string]$ruleName)
+    
+    # Find potential KQL files for this rule
+    $kqlPattern = "kql/$ruleName*.kql"
+    $kqlFiles = Get-ChildItem $kqlPattern -ErrorAction SilentlyContinue
+    
+    foreach ($kqlFile in $kqlFiles) {
+        # Check if this KQL file is still referenced in any bicep file
+        $isReferenced = $false
+        $bicepFiles = Get-ChildItem "env/deploy-*.bicep"
+        
+        foreach ($bicepFile in $bicepFiles) {
+            $bicepContent = Get-Content -Path $bicepFile.FullName -Raw
+            if ($bicepContent -match "loadTextContent\('\.\./kql/$([regex]::Escape($kqlFile.Name))'\)") {
+                $isReferenced = $true
+                break
+            }
+        }
+        
+        if (-not $isReferenced) {
+            # Remove the KQL file
+            Remove-Item $kqlFile.FullName
+            Write-Host "🗑️  Removed unused KQL file: $($kqlFile.Name)" -ForegroundColor Red
+            
+            # Remove the KQL variable from bicep files
+            foreach ($bicepFile in $bicepFiles) {
+                $bicepContent = Get-Content -Path $bicepFile.FullName -Raw
+                $varPattern = "var\s+kql\w*\s*=\s*loadTextContent\('\.\./kql/$([regex]::Escape($kqlFile.Name))'\)\s*\n?"
+                if ($bicepContent -match $varPattern) {
+                    $bicepContent = $bicepContent -replace $varPattern, ''
+                    $bicepContent | Out-File -FilePath $bicepFile.FullName -Encoding UTF8
+                    Write-Host "🗑️  Removed KQL variable from $($bicepFile.Name)" -ForegroundColor Red
+                }
+            }
+        }
+    }
+}
+
 # Function to update KQL file
 function Update-KqlFile {
     param(
@@ -559,14 +711,25 @@ try {
                 $groupingMap[$key] = $val
             }
         }
-        # Entities block -> parse all key:'value' pairs (preserve any unknown keys)
+        # Entities block -> parse all key:'value' pairs using more robust approach
         $entitiesMap = @{}
-        $entBlock = $null
-        if ($block -match "(?s)entities:\s*\{(.*?)\}") { $entBlock = $matches[1] }
-        if ($entBlock) {
-            $matchesFound = [regex]::Matches($entBlock, "(?m)^\s*([A-Za-z0-9_]+):\s*'([^']*)'")
-            foreach ($mm in $matchesFound) {
-                $entitiesMap[$mm.Groups[1].Value] = $mm.Groups[2].Value
+        # Find all key: 'value' patterns directly in the rule block, filtering for entities section
+        $allMatches = [regex]::Matches($block, "([A-Za-z0-9_]+):\s*'([^']*)'")
+        $inEntitiesSection = $false
+        $blockLines = $block -split "`n"
+        
+        for ($i = 0; $i -lt $blockLines.Count; $i++) {
+            $line = $blockLines[$i].Trim()
+            if ($line -match '^entities:\s*\{') {
+                $inEntitiesSection = $true
+                continue
+            }
+            if ($inEntitiesSection -and $line -match '^\}') {
+                $inEntitiesSection = $false
+                continue  
+            }
+            if ($inEntitiesSection -and $line -match "([A-Za-z0-9_]+):\s*'([^']*)'") {
+                $entitiesMap[$matches[1]] = $matches[2]
             }
         }
         $tacticsArr    = parseList "tactics:\s*\[([^\]]*)\]"
@@ -668,6 +831,24 @@ try {
     
     $updatedCount = 0
     $allChanges = @()
+    $deletedRules = @()
+    
+    # Check for deleted rules (rules in repo but not in portal)
+    if (-not $RuleName) {  # Only check for deletions when syncing all rules
+        Write-Host "`n🔍 Checking for deleted rules..." -ForegroundColor Cyan
+        $deletedRules = Find-DeletedRules -portalRules $rules -env $Environment
+        if ($deletedRules.Count -gt 0) {
+            Write-Host "📋 Found $($deletedRules.Count) deleted rule(s):" -ForegroundColor Yellow
+            foreach ($deleted in $deletedRules) {
+                Write-Host " - $($deleted.DisplayName) ($($deleted.Name))" -ForegroundColor Red
+                $allChanges += [PSCustomObject]@{
+                    Rule    = $deleted.DisplayName
+                    Name    = $deleted.Name
+                    Changes = @("rule: deleted from portal")
+                }
+            }
+        }
+    }
     
     foreach ($rule in $rules) {
         $cleanRuleName = Get-RuleNameFromDisplay -DisplayName $rule.displayName
@@ -771,6 +952,8 @@ try {
         # Canonical comparison of the whole rule (metadata + KQL)
         $portalCanon = Get-CanonicalFromPortal -rule $rule -entities $entities -env $Environment
         $repoCanon   = Get-CanonicalFromRepo -displayName $rule.displayName -cleanName $cleanRuleName -env $Environment
+        
+
         # Ensure non-null PSCustomObject for comparison
         if ($null -eq $repoCanon) { $repoCanon = [pscustomobject]@{ } }
         if ($null -eq $portalCanon) { $portalCanon = [pscustomobject]@{ } }
@@ -810,6 +993,16 @@ try {
             }
         } else {
             Write-Host "   ✅ No changes detected - skipping" -ForegroundColor Green
+        }
+    }
+    
+    # Process deleted rules
+    if ($deletedRules.Count -gt 0 -and -not $DryRun) {
+        Write-Host "`n🗑️  Processing deleted rules..." -ForegroundColor Red
+        foreach ($deleted in $deletedRules) {
+            Remove-RuleFromBicep -ruleName $deleted.Name -displayName $deleted.DisplayName -env $Environment
+            Remove-UnusedKqlFile -ruleName $deleted.Name
+            $updatedCount++
         }
     }
     
