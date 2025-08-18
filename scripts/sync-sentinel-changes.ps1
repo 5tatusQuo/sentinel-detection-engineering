@@ -100,7 +100,10 @@ function Update-KqlFile {
     
     $kqlPath = "kql/$RuleName.kql"
     
-    if ($DryRun) { return }
+    if ($DryRun) { 
+        Write-Host "📝 Would update KQL file: $kqlPath" -ForegroundColor Yellow
+        return 
+    }
     
     try {
         # Ensure kql directory exists
@@ -122,7 +125,7 @@ function Update-KqlFile {
 function Update-BicepConfig {
     param(
         [string]$RuleName,
-        [object]$RuleConfig
+        [object]$PortalCanon
     )
     
     $devBicepPath = "env/deploy-dev.bicep"
@@ -144,7 +147,7 @@ function Update-BicepConfig {
         $envPrefix = if ($Environment -eq "prod") { "[PROD]" } else { "[DEV]" }
         $envSeverity = if ($Environment -eq "prod") {
             # Escalate severity for prod
-            switch ($RuleConfig.severity) {
+            switch ($PortalCanon.severity) {
                 "Low" { "Medium" }
                 "Medium" { "High" }
                 "High" { "Critical" }
@@ -152,49 +155,87 @@ function Update-BicepConfig {
                 default { "Medium" }
             }
         } else {
-            $RuleConfig.severity
+            $PortalCanon.severity
         }
-        $envCreateIncident = if ($Environment -eq "prod") { "true" } else { $($RuleConfig.createIncident.ToString().ToLower()) }
+        $envCreateIncident = if ($Environment -eq "prod") { "true" } else { $PortalCanon.createIncident }
+        
+        # Dynamically build entities block
+        $entitiesBlock = ""
+        if ($PortalCanon.entities -and $PortalCanon.entities.psobject.Properties.Count -gt 0) {
+            $entitiesBlock = "    entities: {`n"
+            foreach ($prop in $PortalCanon.entities.psobject.Properties) {
+                $entitiesBlock += "      $($prop.Name): '$($prop.Value)'`n"
+            }
+            $entitiesBlock += "    }`n"
+        } else {
+            $entitiesBlock = "    entities: {}`n"
+        }
+        
+        # Dynamically build grouping block
+        $groupingBlock = ""
+        if ($PortalCanon.grouping -and $PortalCanon.grouping.psobject.Properties.Count -gt 0) {
+            $groupingBlock = "    grouping: {`n"
+            foreach ($prop in $PortalCanon.grouping.psobject.Properties) {
+                $val = if ($prop.Value -match '^(true|false)$') { $prop.Value } else { "'$($prop.Value)'" }
+                $groupingBlock += "      $($prop.Name): $val`n"
+            }
+            $groupingBlock += "    }`n"
+        } else {
+            $groupingBlock = "    grouping: {}`n"
+        }
+        
+        # Build tactics and techniques
+        $tacticsStr = if ($PortalCanon.tactics -and $PortalCanon.tactics.Count -gt 0) { $PortalCanon.tactics -join ', ' } else { '' }
+        $techniquesStr = if ($PortalCanon.techniques -and $PortalCanon.techniques.Count -gt 0) { $PortalCanon.techniques -join ', ' } else { '' }
         
         $ruleObject = @"
   {
     name: '$RuleName'
-    displayName: '$envPrefix [ORG] – $($RuleConfig.displayName)'
+    displayName: '$envPrefix [ORG] – $($PortalCanon.displayName)'
     kql: kql$RuleName
     severity: '$envSeverity'
-    enabled: $($RuleConfig.enabled.ToString().ToLower())
-    frequency: '$($RuleConfig.queryFrequency)'
-    period: '$($RuleConfig.queryPeriod)'
-    tactics: [ $($RuleConfig.tactics -join ', ') ]
-    techniques: [ $($RuleConfig.techniques -join ', ') ]
+    enabled: $($PortalCanon.enabled)
+    frequency: '$($PortalCanon.frequency)'
+    period: '$($PortalCanon.period)'
+    tactics: [ $tacticsStr ]
+    techniques: [ $techniquesStr ]
     createIncident: $envCreateIncident
-    grouping: {
-      enabled: $($RuleConfig.groupingEnabled.ToString().ToLower())
-      matchingMethod: '$($RuleConfig.groupingMethod)'
-    }
-    entities: {
-      ipAddress: '$($RuleConfig.entities.ipAddress)'
-      accountFullName: '$($RuleConfig.entities.accountFullName)'
-      hostName: '$($RuleConfig.entities.hostName)'
-    }
-    customDetails: {
-      $($RuleConfig.customDetails -join "`n      ")
+$groupingBlock$entitiesBlock    customDetails: {
+      // TODO: Sync customDetails if needed
     }
   }
 "@
-
+        
+        # Helper to update content: replace if exists, else append to array
+        function Update-Content {
+            param([string]$content, [string]$ruleObj, [string]$rname)
+            $escName = [regex]::Escape($rname)
+            $pat = "(?s)\{\s*name:\s*'$escName'.*?\n\s*\}"
+            if ($content -match $pat) {
+                return $content -replace $pat, $ruleObj
+            } else {
+                # Append to the end of the rules array (assume array is var rules = [ ... ])
+                $arrayPat = '(?s)var\s*rules\s*=\s*\[(.*?)\]'
+                if ($content -match $arrayPat) {
+                    $arrayContent = $matches[1].TrimEnd()
+                    $newArray = "$arrayContent`n$ruleObj`n  ]"
+                    return $content -replace $arrayPat, "var rules = [$newArray"
+                }
+            }
+            return $content
+        }
+        
         # Update appropriate Bicep file based on environment
         if ($Environment -eq "prod") {
-            $prodContent = $prodContent -replace "(?s)  \{\s*name: '$RuleName'.*?\n  \}", $ruleObject
+            $prodContent = Update-Content -content $prodContent -ruleObj $ruleObject -rname $RuleName
             $prodContent | Out-File -FilePath $prodBicepPath -Encoding UTF8
             Write-Host "✅ Updated PROD Bicep file for rule: $RuleName" -ForegroundColor Green
         } else {
-            $devContent = $devContent -replace "(?s)  \{\s*name: '$RuleName'.*?\n  \}", $ruleObject
+            $devContent = Update-Content -content $devContent -ruleObj $ruleObject -rname $RuleName
             $devContent | Out-File -FilePath $devBicepPath -Encoding UTF8
             Write-Host "✅ Updated DEV Bicep file for rule: $RuleName" -ForegroundColor Green
         }
         
-        # Removed duplicate line
     }
     catch {
         Write-Host "❌ Failed to update Bicep files for rule: $RuleName" -ForegroundColor Red
@@ -598,17 +639,28 @@ try {
         $ruleChanges = Compare-Canon -repo $repoCanon -portal $portalCanon
         $changesDetected = ($ruleChanges.Count -gt 0)
         
+        $kqlChanged = ($ruleChanges | Where-Object { $_ -match '^kql:' }).Count -gt 0
+        $metadataChanged = ($ruleChanges | Where-Object { $_ -notmatch '^kql:' }).Count -gt 0
+        
         # Only update if changes are detected or ForceSync is enabled
         if ($changesDetected -or $ForceSync) {
             if ($ForceSync) {
                 Write-Host "   🔄 Force sync enabled - updating files" -ForegroundColor Cyan
             }
             
-            # Update KQL file
-            Update-KqlFile -RuleName $cleanRuleName -Query $rule.query
+            # Update KQL only if changed or force
+            if ($kqlChanged -or $ForceSync) {
+                Update-KqlFile -RuleName $cleanRuleName -Query $rule.query
+            } else {
+                Write-Host "   ✅ KQL unchanged - skipping update" -ForegroundColor Green
+            }
             
-            # Update Bicep configuration
-            Update-BicepConfig -RuleName $cleanRuleName -RuleConfig $ruleConfig
+            # Update Bicep only if metadata changed or force
+            if ($metadataChanged -or $ForceSync) {
+                Update-BicepConfig -RuleName $cleanRuleName -PortalCanon $portalCanon
+            } else {
+                Write-Host "   ✅ Metadata unchanged - skipping Bicep update" -ForegroundColor Green
+            }
             
             $updatedCount++
             if ($ruleChanges.Count -gt 0) {

@@ -72,6 +72,12 @@ jobs:
         echo "branch-name=$BRANCH_NAME" >> $GITHUB_OUTPUT
         echo "📝 Using branch: $BRANCH_NAME"
 
+    - name: Set current date
+      id: date
+      run: |
+        echo "today=$(date -u +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+        echo "timestamp=$(date -u +'%Y-%m-%d %H:%M UTC')" >> $GITHUB_OUTPUT
+
     - name: Sync from Sentinel
       run: |
         echo "🔄 Starting manual sync from ${{ inputs.environment }} environment..."
@@ -112,7 +118,7 @@ jobs:
         token: ${{ secrets.GITHUB_TOKEN }}
         branch: ${{ steps.branch-name.outputs.branch-name }}
         base: main
-        title: "🔄 Manual Sync from ${{ inputs.environment }} - $(date -u +'%Y-%m-%d')"
+        title: "🔄 Manual Sync from ${{ inputs.environment }} - ${{ steps.date.outputs.today }}"
         body: |
           ## Manual Sync from ${{ inputs.environment }} Environment
           
@@ -121,7 +127,7 @@ jobs:
           **Environment:** ${{ inputs.environment }}
           **Branch:** ${{ steps.branch-name.outputs.branch-name }}
           **Rule:** ${{ inputs.rule_name || 'All custom rules' }}
-          **Timestamp:** $(date -u +'%Y-%m-%d %H:%M UTC')
+          **Timestamp:** ${{ steps.date.outputs.timestamp }}
           
           ### Changes
           - Synced KQL queries
@@ -129,7 +135,7 @@ jobs:
           - Custom rules only (vendor rules excluded)
           
           Please review the changes before merging.
-        commit-message: "🔄 Manual sync from ${{ inputs.environment }} - $(date -u +'%Y-%m-%d %H:%M UTC')"
+        commit-message: "🔄 Manual sync from ${{ inputs.environment }} - ${{ steps.date.outputs.timestamp }}"
         delete-branch: true
         add-paths: |
           rules/
