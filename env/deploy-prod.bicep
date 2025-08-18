@@ -77,21 +77,7 @@ var rules = [
       // TODO: Sync customDetails if needed
     }
   }
-  {
-    name: 'test1'
-    displayName: '[PROD] [ORG] – Test1'
-    kql: kqltest1
-    severity: 'Medium'
-    enabled: true
-    frequency: 'PT1H'
-    period: 'PT1H'
-    tactics: [ 'InitialAccess' ]
-    techniques: [ 'T1078' ]
-    createIncident: true
-    grouping: {
-      enabled: true
-      matchingMethod: 'AllEntities'
-    }
+  
     entities: {
       ipAddress: 'IpAddress'
       accountFullName: 'SubjectUserName'
@@ -186,4 +172,5 @@ module sentinelRules '../infra/sentinel-rules.bicep' = {
 
 // Outputs
 output deployedRules array = sentinelRules.outputs.deployedRules
+
 
