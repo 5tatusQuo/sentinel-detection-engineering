@@ -213,7 +213,7 @@ jobs:
         echo "Changed files: $CHANGED_FILES"
         
         # Validate all Bicep templates using configuration
-        pwsh -File .\scripts\validate-bicep.ps1
+        pwsh -File scripts/validate-bicep.ps1
         
         # Validate KQL files if any were changed
         if [[ "$CHANGED_FILES" == *"org*/kql/"* ]]; then
