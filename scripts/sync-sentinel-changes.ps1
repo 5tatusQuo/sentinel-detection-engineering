@@ -100,11 +100,7 @@ function Update-KqlFile {
     
     $kqlPath = "kql/$RuleName.kql"
     
-    if ($DryRun) {
-        Write-Host "📝 Would update KQL file: $kqlPath" -ForegroundColor Yellow
-        Write-Host "   Query: $Query" -ForegroundColor Gray
-        return
-    }
+    if ($DryRun) { return }
     
     try {
         # Ensure kql directory exists
@@ -267,21 +263,27 @@ try {
     
     # Filter by specific rule if provided
     if ($RuleName) {
-        $rules = $rules | Where-Object { $_.name -eq $RuleName }
+        $rules = $rules | Where-Object { 
+            $_.name -eq $RuleName -or 
+            $_.displayName -like "*$RuleName*" -or
+            (Get-RuleNameFromDisplay -DisplayName $_.displayName) -eq $RuleName
+        }
         if (!$rules) {
             Write-Host "❌ Rule '$RuleName' not found in Sentinel" -ForegroundColor Red
+            Write-Host "   Available rules:" -ForegroundColor Gray
+            $rules | ForEach-Object { Write-Host "   - $($_.displayName) (name: $($_.name))" -ForegroundColor Gray }
             exit 1
         }
         Write-Host "🎯 Syncing specific rule: $RuleName" -ForegroundColor Yellow
     }
     
     $updatedCount = 0
+    $allChanges = @()
     
     foreach ($rule in $rules) {
         $cleanRuleName = Get-RuleNameFromDisplay -DisplayName $rule.displayName
         
         Write-Host "`n🔄 Processing rule: $($rule.displayName)" -ForegroundColor Cyan
-        Write-Host "   Clean name: $cleanRuleName" -ForegroundColor Gray
         
         # Extract entity mappings
         $entities = @{
@@ -324,17 +326,93 @@ try {
             customDetails = $customDetails
         }
         
-        # Update KQL file
-        Update-KqlFile -RuleName $cleanRuleName -Query $rule.query
+        # Simple change detection - KQL and frequency/period
+        $changesDetected = $false
+        $ruleChanges = @()
         
-        # Update Bicep configuration
-        Update-BicepConfig -RuleName $cleanRuleName -RuleConfig $ruleConfig
+        # Check KQL for changes
+        $kqlPath = "kql/$cleanRuleName.kql"
+        if (Test-Path $kqlPath) {
+            $existingKql = Get-Content -Path $kqlPath -Raw
+            if ($existingKql -and $rule.query) {
+                if ($existingKql.Trim() -ne $rule.query.Trim()) {
+                    $changesDetected = $true
+                    $ruleChanges += "kql: changed"
+                }
+            }
+        } else {
+            $changesDetected = $true
+            $ruleChanges += "kql: new file"
+        }
         
-        $updatedCount++
+        # Check current Bicep file for frequency/period changes
+        $prodBicepPath = "env/deploy-prod.bicep"
+        
+        if (Test-Path $prodBicepPath) {
+            $prodContent = Get-Content -Path $prodBicepPath -Raw
+            
+            # Look for the rule in the Bicep file
+            $rulePattern = "(?s)\{\s*name:\s*'$cleanRuleName'.*?frequency:\s*'([^']*)'.*?period:\s*'([^']*)'.*?\}"
+            if ($prodContent -match $rulePattern) {
+                $currentFreq = $matches[1]
+                $currentPeriod = $matches[2]
+                $newFreq = $rule.queryFrequency
+                $newPeriod = $rule.queryPeriod
+                
+                if ($currentFreq -ne $newFreq) {
+                    $changesDetected = $true
+                    $ruleChanges += "frequency: repo=$currentFreq -> portal=$newFreq"
+                }
+                if ($currentPeriod -ne $newPeriod) {
+                    $changesDetected = $true
+                    $ruleChanges += "period: repo=$currentPeriod -> portal=$newPeriod"
+                }
+            } else {
+                Write-Host "   📝 Rule not found in Bicep file" -ForegroundColor Yellow
+                $changesDetected = $true
+                $ruleChanges += "rule: not present in repo -> will be added"
+            }
+        }
+        
+        # Only update if changes are detected or ForceSync is enabled
+        if ($changesDetected -or $ForceSync) {
+            if ($ForceSync) {
+                Write-Host "   🔄 Force sync enabled - updating files" -ForegroundColor Cyan
+            }
+            
+            # Update KQL file
+            Update-KqlFile -RuleName $cleanRuleName -Query $rule.query
+            
+            # Update Bicep configuration
+            Update-BicepConfig -RuleName $cleanRuleName -RuleConfig $ruleConfig
+            
+            $updatedCount++
+            if ($ruleChanges.Count -gt 0) {
+                $allChanges += [PSCustomObject]@{
+                    Rule    = $rule.displayName
+                    Name    = $cleanRuleName
+                    Changes = $ruleChanges
+                }
+            }
+        } else {
+            Write-Host "   ✅ No changes detected - skipping" -ForegroundColor Green
+        }
     }
     
     Write-Host "`n🎉 Sync completed!" -ForegroundColor Green
     Write-Host "   Updated $updatedCount rule(s)" -ForegroundColor Yellow
+    
+    if ($allChanges.Count -gt 0) {
+        Write-Host "\n📋 Change Summary:" -ForegroundColor Cyan
+        foreach ($c in $allChanges) {
+            Write-Host " - $($c.Rule) ($($c.Name))" -ForegroundColor White
+            foreach ($item in $c.Changes) {
+                Write-Host "    • $item" -ForegroundColor Gray
+            }
+        }
+    } else {
+        Write-Host "\n📋 No changes detected" -ForegroundColor Cyan
+    }
     
     if ($DryRun) {
         Write-Host "`n💡 To apply these changes, run without -DryRun flag" -ForegroundColor Cyan
