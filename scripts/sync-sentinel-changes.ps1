@@ -76,8 +76,9 @@ Write-Host ""
 function Get-CleanRuleName {
     param([string]$DisplayName)
     
-    # Remove environment prefixes like [DEV] [ORG] –
-    $cleanName = $DisplayName -replace '^\[(DEV|PROD)\]\s*\[[^\]]+\]\s*–\s*', ''
+    # Remove environment prefixes like [DEV] [ORG] – (note: – is U+2013 en dash)
+    $dashChar = [char]0x2013
+    $cleanName = $DisplayName -replace "^\[(DEV|PROD)\]\s*\[[^\]]+\]\s*$dashChar\s*", ''
     return $cleanName
 }
 
@@ -125,74 +126,105 @@ function Update-KqlFile {
 function Update-BicepConfig {
     param(
         [string]$RuleName,
-        [object]$PortalCanon
+        [object]$PortalCanon,
+        [string]$OriginalDisplayName
     )
     
     $devBicepPath = "env/deploy-dev.bicep"
     $prodBicepPath = "env/deploy-prod.bicep"
     
-    if ($DryRun) {
-        Write-Host "📝 Would update Bicep files:" -ForegroundColor Yellow
-        Write-Host "   Dev: $devBicepPath" -ForegroundColor Gray
-        Write-Host "   Prod: $prodBicepPath" -ForegroundColor Gray
-        return
+    # Find the corresponding KQL file for this rule
+    $cleanDisplayName = Get-CleanRuleName -DisplayName $OriginalDisplayName
+    $generatedRuleName = $cleanDisplayName.ToLower() -replace '[^a-z0-9\s]', '' -replace '\s+', '-'
+    
+    # Try to find existing KQL file that matches this rule
+    $kqlFiles = Get-ChildItem "kql/*.kql"
+    $matchedKqlFile = $null
+    
+    # First try exact match
+    $exactMatch = $kqlFiles | Where-Object { $_.BaseName -eq $generatedRuleName }
+    if ($exactMatch) {
+        $matchedKqlFile = $exactMatch
+    } else {
+        # Try fuzzy matching based on keywords in the display name
+        $keywords = $cleanDisplayName.ToLower() -split '\s+' | Where-Object { $_.Length -gt 2 }
+        foreach ($kqlFile in $kqlFiles) {
+            $basename = $kqlFile.BaseName.ToLower()
+            $matchCount = 0
+            foreach ($keyword in $keywords) {
+                if ($basename -like "*$keyword*") { $matchCount++ }
+            }
+            # If we match most keywords, use this file
+            if ($matchCount -ge [Math]::Max(1, $keywords.Count - 1)) {
+                $matchedKqlFile = $kqlFile
+                break
+            }
+        }
     }
     
-    try {
-        # Read existing Bicep files
-        $devContent = Get-Content -Path $devBicepPath -Raw
-        $prodContent = Get-Content -Path $prodBicepPath -Raw
+    # Use the matched KQL file name or fallback to generated name
+    if ($matchedKqlFile) {
+        $generatedRuleName = $matchedKqlFile.BaseName
+        Write-Host "   Found matching KQL file: $($matchedKqlFile.Name)" -ForegroundColor Green
         
-        # Create rule object based on environment
-        $envPrefix = if ($Environment -eq "prod") { "[PROD]" } else { "[DEV]" }
-        $envSeverity = if ($Environment -eq "prod") {
-            # Escalate severity for prod
-            switch ($PortalCanon.severity) {
-                "Low" { "Medium" }
-                "Medium" { "High" }
-                "High" { "Critical" }
-                "Critical" { "Critical" }
-                default { "Medium" }
+        # Try to find existing KQL variable in bicep file
+        $bicepPath = if ($Environment -eq 'prod') { $prodBicepPath } else { $devBicepPath }
+        $generatedKqlVar = "kql$($generatedRuleName -replace '-', '')" # fallback
+        
+        if (Test-Path $bicepPath) {
+            $bicepContent = Get-Content -Path $bicepPath -Raw
+            $kqlFileName = $matchedKqlFile.Name
+            $varPattern = "var\s+(kql\w+)\s*=\s*loadTextContent\('\.\./kql/$([regex]::Escape($kqlFileName))'\)"
+            if ($bicepContent -match $varPattern) {
+                $generatedKqlVar = $matches[1]
+                Write-Host "   Found existing KQL variable: $generatedKqlVar" -ForegroundColor Green
             }
-        } else {
-            $PortalCanon.severity
         }
-        $envCreateIncident = if ($Environment -eq "prod") { "true" } else { $PortalCanon.createIncident }
+    } else {
+        Write-Host "   Warning: No matching KQL file found, using generated name: $generatedRuleName" -ForegroundColor Yellow
+        $generatedKqlVar = "kql$($generatedRuleName -replace '-', '')"
+    }
+    
+    # Use portal as the source of truth for all values
+    $envSeverity = $PortalCanon.severity
+    $envCreateIncident = $PortalCanon.createIncident
+    $envTechniques = $PortalCanon.techniques
+    $envEntities = $PortalCanon.entities
         
-        # Dynamically build entities block
-        $entitiesBlock = ""
-        if ($PortalCanon.entities -and $PortalCanon.entities.psobject.Properties.Count -gt 0) {
-            $entitiesBlock = "    entities: {`n"
-            foreach ($prop in $PortalCanon.entities.psobject.Properties) {
-                $entitiesBlock += "      $($prop.Name): '$($prop.Value)'`n"
-            }
-            $entitiesBlock += "    }`n"
-        } else {
-            $entitiesBlock = "    entities: {}`n"
+    # Dynamically build entities block using portal values
+    $entitiesBlock = ""
+    if ($envEntities -and $envEntities.psobject.Properties.Count -gt 0) {
+        $entitiesBlock = "    entities: {`n"
+        foreach ($prop in $envEntities.psobject.Properties) {
+            $entitiesBlock += "      $($prop.Name): '$($prop.Value)'`n"
         }
-        
-        # Dynamically build grouping block
-        $groupingBlock = ""
-        if ($PortalCanon.grouping -and $PortalCanon.grouping.psobject.Properties.Count -gt 0) {
-            $groupingBlock = "    grouping: {`n"
-            foreach ($prop in $PortalCanon.grouping.psobject.Properties) {
-                $val = if ($prop.Value -match '^(true|false)$') { $prop.Value } else { "'$($prop.Value)'" }
-                $groupingBlock += "      $($prop.Name): $val`n"
-            }
-            $groupingBlock += "    }`n"
-        } else {
-            $groupingBlock = "    grouping: {}`n"
+        $entitiesBlock += "    }`n"
+    } else {
+        $entitiesBlock = "    entities: {}`n"
+    }
+    
+    # Dynamically build grouping block using portal values
+    $groupingBlock = ""
+    if ($PortalCanon.grouping -and $PortalCanon.grouping.psobject.Properties.Count -gt 0) {
+        $groupingBlock = "    grouping: {`n"
+        foreach ($prop in $PortalCanon.grouping.psobject.Properties) {
+            $val = if ($prop.Value -match '^(true|false)$') { $prop.Value } else { "'$($prop.Value)'" }
+            $groupingBlock += "      $($prop.Name): $val`n"
         }
-        
-        # Build tactics and techniques
-        $tacticsStr = if ($PortalCanon.tactics -and $PortalCanon.tactics.Count -gt 0) { $PortalCanon.tactics -join ', ' } else { '' }
-        $techniquesStr = if ($PortalCanon.techniques -and $PortalCanon.techniques.Count -gt 0) { $PortalCanon.techniques -join ', ' } else { '' }
-        
-        $ruleObject = @"
+        $groupingBlock += "    }`n"
+    } else {
+        $groupingBlock = "    grouping: {}`n"
+    }
+    
+    # Build tactics and techniques using portal values
+    $tacticsStr = if ($PortalCanon.tactics -and $PortalCanon.tactics.Count -gt 0) { $PortalCanon.tactics -join ', ' } else { '' }
+    $techniquesStr = if ($envTechniques -and $envTechniques.Count -gt 0) { $envTechniques -join ', ' } else { '' }
+    
+    $ruleObject = @"
   {
-    name: '$RuleName'
-    displayName: '$envPrefix [ORG] – $($PortalCanon.displayName)'
-    kql: kql$RuleName
+    name: '$generatedRuleName'
+    displayName: '$OriginalDisplayName'
+    kql: $generatedKqlVar
     severity: '$envSeverity'
     enabled: $($PortalCanon.enabled)
     frequency: '$($PortalCanon.frequency)'
@@ -205,6 +237,21 @@ $groupingBlock$entitiesBlock    customDetails: {
     }
   }
 "@
+    
+    if ($DryRun) {
+        Write-Host "📝 Would update Bicep files:" -ForegroundColor Yellow
+        Write-Host "   Dev: $devBicepPath" -ForegroundColor Gray
+        Write-Host "   Prod: $prodBicepPath" -ForegroundColor Gray
+
+        Write-Host "`n📄 Generated Bicep object:" -ForegroundColor Cyan
+        Write-Host $ruleObject -ForegroundColor White
+        return
+    }
+    
+    try {
+        # Read existing Bicep files
+        $devContent = Get-Content -Path $devBicepPath -Raw
+        $prodContent = Get-Content -Path $prodBicepPath -Raw
         
         # Helper to update content: replace if exists, else append to array
         function Update-Content {
@@ -227,13 +274,13 @@ $groupingBlock$entitiesBlock    customDetails: {
         
         # Update appropriate Bicep file based on environment
         if ($Environment -eq "prod") {
-            $prodContent = Update-Content -content $prodContent -ruleObj $ruleObject -rname $RuleName
+            $prodContent = Update-Content -content $prodContent -ruleObj $ruleObject -rname $generatedRuleName
             $prodContent | Out-File -FilePath $prodBicepPath -Encoding UTF8
-            Write-Host "✅ Updated PROD Bicep file for rule: $RuleName" -ForegroundColor Green
+            Write-Host "✅ Updated PROD Bicep file for rule: $generatedRuleName" -ForegroundColor Green
         } else {
-            $devContent = Update-Content -content $devContent -ruleObj $ruleObject -rname $RuleName
+            $devContent = Update-Content -content $devContent -ruleObj $ruleObject -rname $generatedRuleName
             $devContent | Out-File -FilePath $devBicepPath -Encoding UTF8
-            Write-Host "✅ Updated DEV Bicep file for rule: $RuleName" -ForegroundColor Green
+            Write-Host "✅ Updated DEV Bicep file for rule: $generatedRuleName" -ForegroundColor Green
         }
         
     }
@@ -572,6 +619,15 @@ try {
                 if ($detail) {
                     # Some payloads nest under properties
                     $props = if ($detail.properties) { $detail.properties } else { $detail }
+                    
+                    # Update missing fields from detailed response
+                    if ($props.techniques -and $props.techniques.Count -gt 0) {
+                        $rule.techniques = $props.techniques
+                    }
+                    if ($props.createIncident -ne $null) {
+                        $rule.createIncident = $props.createIncident
+                    }
+                    
                     # Overwrite entities from detail if present
                     if ($props.entityMappings) {
                         $entities = @{}
@@ -657,7 +713,7 @@ try {
             
             # Update Bicep only if metadata changed or force
             if ($metadataChanged -or $ForceSync) {
-                Update-BicepConfig -RuleName $cleanRuleName -PortalCanon $portalCanon
+                Update-BicepConfig -RuleName $cleanRuleName -PortalCanon $portalCanon -OriginalDisplayName $rule.displayName
             } else {
                 Write-Host "   ✅ Metadata unchanged - skipping Bicep update" -ForegroundColor Green
             }
