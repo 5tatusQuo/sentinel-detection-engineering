@@ -675,28 +675,20 @@ try {
         }
     }
     
-    Write-Host "`n🎉 Sync completed!" -ForegroundColor Green
-    Write-Host "   Updated $updatedCount rule(s)" -ForegroundColor Yellow
-    
     if ($allChanges.Count -gt 0) {
-        Write-Host "\n📋 Change Summary:" -ForegroundColor Cyan
+        Write-Host "`n📝 Detected changes:" -ForegroundColor Cyan
         foreach ($c in $allChanges) {
-            Write-Host " - $($c.Rule) ($($c.Name))" -ForegroundColor White
+            Write-Host " - $($c.Rule)" -ForegroundColor White
             foreach ($item in $c.Changes) {
                 Write-Host "    • $item" -ForegroundColor Gray
             }
         }
     } else {
-        Write-Host "\n📋 No changes detected" -ForegroundColor Cyan
+        Write-Host "`n✅ No changes detected" -ForegroundColor Green
     }
     
     if ($DryRun) {
         Write-Host "`n💡 To apply these changes, run without -DryRun flag" -ForegroundColor Cyan
-    } else {
-        Write-Host "`nNext steps:" -ForegroundColor Cyan
-        Write-Host "   1. Review the changes in git" -ForegroundColor White
-        Write-Host "   2. Commit and push to feature branch" -ForegroundColor White
-        Write-Host "   3. Automatic deployment will verify the sync" -ForegroundColor White
     }
     
 }
