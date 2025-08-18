@@ -59,9 +59,9 @@ jobs:
           -ResourceGroup "${{ secrets.SENTINEL_RG_PROD }}" \
           -WorkspaceName "${{ secrets.SENTINEL_WS_PROD }}" \
           -Environment "prod" \
-          -VendorRulesOnly $true \
-          -CreateBranch $false \
-          -ForceSync ${{ inputs.force_sync || false }}
+          -VendorRulesOnly:$true \
+          -CreateBranch:$false \
+          -ForceSync:${{ inputs.force_sync || false }}
 
     - name: Check for vendor rule changes
       id: check-vendor-changes
@@ -96,9 +96,9 @@ jobs:
           -ResourceGroup "${{ secrets.SENTINEL_RG_PROD }}" \
           -WorkspaceName "${{ secrets.SENTINEL_WS_PROD }}" \
           -Environment "prod" \
-          -IncludeVendorRules $false \
-          -CreateBranch $true \
-          -ForceSync ${{ inputs.force_sync || false }}
+          -IncludeVendorRules:$false \
+          -CreateBranch:$true \
+          -ForceSync:${{ inputs.force_sync || false }}
 
     - name: Check for custom rule changes
       id: check-custom-changes
