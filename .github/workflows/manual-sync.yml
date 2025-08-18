@@ -100,7 +100,6 @@ jobs:
           -ResourceGroup "$RG_SECRET" \
           -WorkspaceName "$WS_SECRET" \
           -Environment "${{ inputs.environment }}" \
-          -IncludeVendorRules $false \
           -CreateBranch $false \
           -ForceSync ${{ inputs.force_sync }} \
           -RuleName "${{ inputs.rule_name }}"
