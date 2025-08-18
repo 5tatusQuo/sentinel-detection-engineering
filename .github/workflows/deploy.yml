@@ -4,9 +4,9 @@ on:
   push:
     branches: [ main, 'feature/**' ]  # Allow feature branches
     paths:
-      - 'env/**'
+      - 'organizations/org*/env/**'
       - 'infra/**'
-      - 'kql/**'
+      - 'organizations/org*/kql/**'
       - '.github/workflows/deploy.yml'
   pull_request:
     branches: [ main ]
@@ -217,22 +217,28 @@ jobs:
         az bicep build --file infra/sentinel-rules.bicep
         az bicep build --file infra/modules/scheduledRule.bicep
         
-        # Validate environment-specific templates if they were changed
-        if [[ "$CHANGED_FILES" == *"env/deploy-dev.bicep"* ]]; then
-          echo "Building dev template (changed)..."
-          az bicep build --file env/deploy-dev.bicep
-        fi
-        
-        if [[ "$CHANGED_FILES" == *"env/deploy-prod.bicep"* ]]; then
-          echo "Building prod template (changed)..."
-          az bicep build --file env/deploy-prod.bicep
-        fi
+        # Validate environment-specific templates using configuration
+        pwsh -Command "
+          . .\scripts\ConfigManager.ps1
+          `$enabledOrgs = Get-EnabledOrganizations
+          foreach (`$org in `$enabledOrgs) {
+            foreach (`$env in @('dev', 'prod')) {
+              if (`$org.environments.`$env.enabled) {
+                `$paths = Get-OrganizationPaths -OrganizationName `$org.name -Environment `$env
+                if (Test-Path `$paths.BicepPath) {
+                  Write-Host `"Building `$(`$org.name) `$env template...`"
+                  az bicep build --file `$paths.BicepPath
+                }
+              }
+            }
+          }
+        "
         
         # Validate KQL files if any were changed
-        if [[ "$CHANGED_FILES" == *"kql/"* ]]; then
+        if [[ "$CHANGED_FILES" == *"org*/kql/"* ]]; then
           echo "KQL files changed - validating syntax..."
           # List changed KQL files for debugging
-          echo "$CHANGED_FILES" | grep "kql/" || echo "No KQL files in changed files list"
+          echo "$CHANGED_FILES" | grep "org.*/kql/" || echo "No KQL files in changed files list"
         fi
         
         echo "✅ Bicep templates validated successfully"
@@ -294,16 +300,28 @@ jobs:
         tenant-id: ${{ secrets.AZURE_TENANT_ID }}
         subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
     
-    - name: Deploy to Dev
+    - name: Deploy All Organizations to Dev
       run: |
-        echo "Deploying to Dev environment..."
+        echo "Deploying all organizations to Dev environment..."
         if [ "${{ needs.detect-deployment-needs.outputs.needs-deployment }}" == "true" ]; then
-          az deployment group create \
-            --resource-group ${{ secrets.SENTINEL_RG_DEV }} \
-            --template-file env/deploy-dev.bicep \
-            --parameters env/params/dev.jsonc \
-            --verbose
-          echo "✅ Dev deployment completed successfully"
+          # Deploy using configuration system
+          pwsh -Command "
+            . .\scripts\ConfigManager.ps1
+            `$enabledOrgs = Get-EnabledOrganizations -Environment 'dev'
+            foreach (`$org in `$enabledOrgs) {
+              `$env = Get-OrganizationEnvironment -OrganizationName `$org.name -Environment 'dev'
+              `$paths = Get-OrganizationPaths -OrganizationName `$org.name -Environment 'dev'
+              
+              Write-Host `"Deploying `$(`$org.name) to Dev environment...`"
+              
+              if (Test-Path `$paths.BicepPath) {
+                az deployment group create --resource-group `$env.resourceGroup --template-file `$paths.BicepPath --verbose
+                Write-Host `"✅ `$(`$org.name) Dev deployment completed successfully`"
+              } else {
+                Write-Host `"⚠️ No dev Bicep file found for `$(`$org.name) - skipping`"
+              }
+            }
+          "
         else
           echo "No deployment needed - skipping"
         fi
@@ -344,16 +362,28 @@ jobs:
         tenant-id: ${{ secrets.AZURE_TENANT_ID }}
         subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
     
-    - name: Deploy to Prod
+    - name: Deploy All Organizations to Prod
       run: |
-        echo "Deploying to Production environment..."
+        echo "Deploying all organizations to Production environment..."
         if [ "${{ needs.detect-deployment-needs.outputs.needs-deployment }}" == "true" ]; then
-          az deployment group create \
-            --resource-group ${{ secrets.SENTINEL_RG_PROD }} \
-            --template-file env/deploy-prod.bicep \
-            --parameters env/params/prod.jsonc \
-            --verbose
-          echo "✅ Production deployment completed successfully"
+          # Deploy using configuration system
+          pwsh -Command "
+            . .\scripts\ConfigManager.ps1
+            `$enabledOrgs = Get-EnabledOrganizations -Environment 'prod'
+            foreach (`$org in `$enabledOrgs) {
+              `$env = Get-OrganizationEnvironment -OrganizationName `$org.name -Environment 'prod'
+              `$paths = Get-OrganizationPaths -OrganizationName `$org.name -Environment 'prod'
+              
+              Write-Host `"Deploying `$(`$org.name) to Production environment...`"
+              
+              if (Test-Path `$paths.BicepPath) {
+                az deployment group create --resource-group `$env.resourceGroup --template-file `$paths.BicepPath --verbose
+                Write-Host `"✅ `$(`$org.name) Production deployment completed successfully`"
+              } else {
+                Write-Host `"⚠️ No prod Bicep file found for `$(`$org.name) - skipping`"
+              }
+            }
+          "
         else
           echo "No deployment needed - skipping"
         fi
@@ -374,3 +404,7 @@ jobs:
         # Add any post-deployment checks here
         # e.g., verify rules are enabled, check incident configuration
         echo "✅ Post-deployment validation completed"
+
+
+
+

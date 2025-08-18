@@ -1,0 +1,1 @@
+SigninLogs | where TimeGenerated > ago(1h) | where ResultType != 0 | summarize FailedAttempts = count() by IPAddress, AppDisplayName, bin(TimeGenerated, 5m) | where FailedAttempts >= 3 | take 100

@@ -43,6 +43,12 @@ tmp/
 deployment-outputs/
 *.deployment.json
 
+# Bicep build artifacts
+*.json
+!package.json
+!package-lock.json
+!.vscode/extensions.json
+
 # Test outputs
 test-results/
 coverage/

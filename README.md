@@ -54,27 +54,117 @@ A beginner-friendly, automated system for creating and deploying Microsoft Senti
 ```
 ├── .github/workflows/
 │   ├── deploy.yml              # Main deployment workflow
-│   └── create-rule-pr.yml      # Rule creation workflow
-├── env/
-│   ├── deploy-dev.bicep        # Dev environment rules
-│   ├── deploy-prod.bicep       # Prod environment rules
-│   └── params/
-│       ├── dev.jsonc           # Dev parameters
-│       └── prod.jsonc          # Prod parameters
+│   ├── manual-sync.yml         # Manual sync workflow
+│   └── nightly-sync.yml        # Nightly sync workflow
+├── config/
+│   └── organizations.json      # Organization configuration
+├── organizations/              # All client organizations
+│   ├── org1/                   # Organization 1 (Client 1)
+│   │   ├── env/
+│   │   │   ├── deploy-dev.bicep    # Dev environment rules
+│   │   │   └── deploy-prod.bicep   # Prod environment rules
+│   │   └── kql/                    # KQL query files
+│   │       ├── dev/                # Dev environment KQL files
+│   │       │   ├── suspicious-login-attempts.kql
+│   │       │   ├── admin-account-anomaly.kql
+│   │       │   └── uc-powershell-encoded.kql
+│   │       └── prod/               # Prod environment KQL files
+│   └── org2/                   # Organization 2 (Client 2)
+│       ├── env/
+│       │   ├── deploy-dev.bicep    # Dev environment rules
+│       │   └── deploy-prod.bicep   # Prod environment rules
+│       └── kql/                    # KQL query files
+│           ├── dev/                # Dev environment KQL files
+│           └── prod/               # Prod environment KQL files
 ├── infra/
 │   ├── sentinel-rules.bicep    # Root orchestrator
 │   └── modules/
 │       └── scheduledRule.bicep # Reusable rule module
-├── kql/                        # KQL query files
-│   ├── suspicious-login-attempts.kql
-│   ├── admin-account-anomaly.kql
-│   └── uc-powershell-encoded.kql
 └── scripts/
+    ├── ConfigManager.ps1       # Configuration management module
     ├── sync-sentinel-changes.ps1 # Portal-to-repo sync script
+    ├── test-config.ps1         # Test configuration system
+    ├── deploy-with-config.ps1  # Example deployment script
+    ├── test-org-structure.ps1  # Test organizational structure
     ├── validate-kql-columns.ps1 # KQL validation
     ├── export_enabled_rules.ps1 # Export vendor rules
     └── detect_drift.ps1         # Detect configuration drift
 ```
+
+## 🏢 Multi-Organization Support
+
+This repository supports multiple organizations/clients in a scalable, configuration-driven way:
+
+### Configuration-Driven Architecture
+- **Centralized Configuration**: All organization settings are defined in `config/organizations.json`
+- **Scalable Structure**: Organizations are stored in `organizations/` directory
+- **Environment Management**: Each organization can have different dev/prod configurations
+- **Flexible Deployment**: Organizations can be enabled/disabled per environment
+
+### Organization Structure
+```
+organizations/
+├── org1/                    # Organization 1
+│   ├── env/
+│   │   ├── deploy-dev.bicep
+│   │   └── deploy-prod.bicep
+│   └── kql/
+│       ├── dev/             # Dev environment KQL files
+│       └── prod/            # Prod environment KQL files
+└── org2/                    # Organization 2
+    ├── env/
+    │   ├── deploy-dev.bicep
+    │   └── deploy-prod.bicep
+    └── kql/
+        ├── dev/             # Dev environment KQL files
+        └── prod/            # Prod environment KQL files
+```
+
+### Configuration Management
+The `config/organizations.json` file defines all organization settings:
+
+```json
+{
+  "organizations": [
+    {
+      "name": "org1",
+      "displayName": "Organization 1",
+      "environments": {
+        "dev": {
+          "resourceGroup": "sentinel-ws-dev",
+          "workspaceName": "sentinel-rg-dev",
+          "enabled": true
+        },
+        "prod": {
+          "resourceGroup": "sentinel-ws-prod",
+          "workspaceName": "sentinel-rg-prod", 
+          "enabled": true
+        }
+      }
+    }
+  ]
+}
+```
+
+### Adding a New Organization
+1. **Add to Configuration**: Add the organization to `config/organizations.json`
+2. **Create Directory Structure**: 
+   ```bash
+   mkdir -p organizations/org3/{env,kql/{dev,prod}}
+   ```
+3. **Create Bicep Files**: Add `deploy-dev.bicep` and `deploy-prod.bicep` in `organizations/org3/env/`
+4. **Add KQL Files**: Place KQL files in `organizations/org3/kql/dev/` and `organizations/org3/kql/prod/`
+5. **Test Configuration**: Run `pwsh -File scripts/test-config.ps1` to validate
+
+### Configuration Scripts
+- **`scripts/ConfigManager.ps1`**: PowerShell module for configuration management
+- **`scripts/test-config.ps1`**: Validates configuration and file structure
+- **`scripts/deploy-with-config.ps1`**: Example deployment using configuration system
+
+### Organization-Specific Operations
+- **Manual Sync**: Specify organization in the workflow parameters
+- **Nightly Sync**: Automatically processes all organizations
+- **Deployment**: Deploys all organizations to their respective environments
 
 ## 🔧 How It Works
 
@@ -101,8 +191,8 @@ A beginner-friendly, automated system for creating and deploying Microsoft Senti
 If you prefer to create rules manually:
 
 ```bash
-# Create KQL file
-echo "your KQL query" > kql/my-rule.kql
+# Create KQL file in the appropriate environment directory
+echo "your KQL query" > organizations/org1/kql/dev/my-rule.kql
 
 # Create rule in Azure Sentinel portal
 # Then run manual sync workflow to pull changes to repository

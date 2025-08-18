@@ -42,6 +42,9 @@ param(
     [string]$Environment = "dev",
     
     [Parameter(Mandatory = $false)]
+    [string]$Organization = "org1",
+    
+    [Parameter(Mandatory = $false)]
     [bool]$CreateBranch = $true,
     
     [Parameter(Mandatory = $false)]
@@ -54,6 +57,9 @@ param(
     [switch]$DryRun
 )
 
+# Import configuration manager
+. .\scripts\ConfigManager.ps1
+
 # Set error action preference
 $ErrorActionPreference = "Stop"
 
@@ -61,6 +67,7 @@ Write-Host "🔄 Starting Sentinel to Repository Sync..." -ForegroundColor Cyan
 Write-Host "Resource Group: $ResourceGroup" -ForegroundColor Yellow
 Write-Host "Workspace: $WorkspaceName" -ForegroundColor Yellow
 Write-Host "Environment: $Environment" -ForegroundColor Yellow
+Write-Host "Organization: $Organization" -ForegroundColor Yellow
 Write-Host "Create Branch: $CreateBranch" -ForegroundColor Yellow
 Write-Host "Force Sync: $ForceSync" -ForegroundColor Yellow
 Write-Host "Vendor Rules Only: $VendorRulesOnly" -ForegroundColor Yellow
@@ -99,7 +106,8 @@ function Find-DeletedRules {
         [string]$env
     )
     
-    $bicepPath = if ($env -eq 'prod') { 'env/deploy-prod.bicep' } else { 'env/deploy-dev.bicep' }
+    $paths = Get-OrganizationPaths -OrganizationName $Organization -Environment $env
+    $bicepPath = $paths.BicepPath
     if (-not (Test-Path $bicepPath)) { return @() }
     
     $content = Get-Content -Path $bicepPath -Raw
@@ -175,16 +183,22 @@ function Remove-RuleFromBicep {
         [string]$env
     )
     
-    $bicepPath = if ($env -eq 'prod') { 'env/deploy-prod.bicep' } else { 'env/deploy-dev.bicep' }
+    $paths = Get-OrganizationPaths -OrganizationName $Organization -Environment $env
+    $bicepPath = $paths.BicepPath
     if (-not (Test-Path $bicepPath)) { return }
     
     $content = Get-Content -Path $bicepPath -Raw
+    $kqlVarToRemove = $null
     
-    # Find and remove the rule block by displayName first, then by name
+    # Find and extract KQL variable info BEFORE removing the rule block
     $escDisplayName = [regex]::Escape($displayName)
     $displayPat = "(?s)\{\s*name:\s*'[^']*'[^}]*displayName:\s*'$escDisplayName'[^}]*\}(?:\s*\})*(,?)"
     
     if ($content -match $displayPat) {
+        $ruleBlock = $matches[0]
+        if ($ruleBlock -match "kql:\s*kql([A-Za-z0-9_-]+)") {
+            $kqlVarToRemove = "kql$($matches[1])"
+        }
         $content = $content -replace $displayPat, ''
         # Clean up any double commas or trailing commas
         $content = $content -replace ',\s*,', ','
@@ -194,10 +208,21 @@ function Remove-RuleFromBicep {
         $escName = [regex]::Escape($ruleName)
         $namePat = "(?s)\{\s*name:\s*'$escName'[^}]*\}(?:\s*\})*(,?)"
         if ($content -match $namePat) {
+            $ruleBlock = $matches[0]
+            if ($ruleBlock -match "kql:\s*kql([A-Za-z0-9_-]+)") {
+                $kqlVarToRemove = "kql$($matches[1])"
+            }
             $content = $content -replace $namePat, ''
             $content = $content -replace ',\s*,', ','
             $content = $content -replace ',(\s*\])', '$1'
         }
+    }
+    
+    # Remove the KQL variable declaration if we found one
+    if ($kqlVarToRemove) {
+        $kqlVarPattern = "var\s+$kqlVarToRemove\s*=\s*loadTextContent\('[^']*'\)\s*\n?"
+        $content = $content -replace $kqlVarPattern, ''
+        Write-Host "🗑️  Removed KQL variable: $kqlVarToRemove" -ForegroundColor Red
     }
     
     $content | Out-File -FilePath $bicepPath -Encoding UTF8
@@ -209,17 +234,20 @@ function Remove-UnusedKqlFile {
     param([string]$ruleName)
     
     # Find potential KQL files for this rule
-    $kqlPattern = "kql/$ruleName*.kql"
+    $paths = Get-OrganizationPaths -OrganizationName $Organization -Environment $Environment
+    $kqlPattern = "$($paths.KqlDirectory)/$ruleName*.kql"
     $kqlFiles = Get-ChildItem $kqlPattern -ErrorAction SilentlyContinue
     
     foreach ($kqlFile in $kqlFiles) {
         # Check if this KQL file is still referenced in any bicep file
         $isReferenced = $false
-        $bicepFiles = Get-ChildItem "env/deploy-*.bicep"
+        $paths = Get-OrganizationPaths -OrganizationName $Organization -Environment $Environment
+        $bicepFiles = Get-ChildItem "$($paths.EnvDirectory)/deploy-*.bicep"
         
         foreach ($bicepFile in $bicepFiles) {
             $bicepContent = Get-Content -Path $bicepFile.FullName -Raw
-            if ($bicepContent -match "loadTextContent\('\.\./kql/$([regex]::Escape($kqlFile.Name))'\)") {
+            $relDir = if ($Environment -eq 'prod') { './kql/prod/' } else { './kql/dev/' }
+            if ($bicepContent -match "loadTextContent\('$([regex]::Escape($relDir))$([regex]::Escape($kqlFile.Name))'\)") {
                 $isReferenced = $true
                 break
             }
@@ -229,17 +257,6 @@ function Remove-UnusedKqlFile {
             # Remove the KQL file
             Remove-Item $kqlFile.FullName
             Write-Host "🗑️  Removed unused KQL file: $($kqlFile.Name)" -ForegroundColor Red
-            
-            # Remove the KQL variable from bicep files
-            foreach ($bicepFile in $bicepFiles) {
-                $bicepContent = Get-Content -Path $bicepFile.FullName -Raw
-                $varPattern = "var\s+kql\w*\s*=\s*loadTextContent\('\.\./kql/$([regex]::Escape($kqlFile.Name))'\)\s*\n?"
-                if ($bicepContent -match $varPattern) {
-                    $bicepContent = $bicepContent -replace $varPattern, ''
-                    $bicepContent | Out-File -FilePath $bicepFile.FullName -Encoding UTF8
-                    Write-Host "🗑️  Removed KQL variable from $($bicepFile.Name)" -ForegroundColor Red
-                }
-            }
         }
     }
 }
@@ -251,7 +268,9 @@ function Update-KqlFile {
         [string]$Query
     )
     
-    $kqlPath = "kql/$RuleName.kql"
+    $paths = Get-OrganizationPaths -OrganizationName $Organization -Environment $Environment
+    $envKqlDir = $paths.KqlDirectory
+    $kqlPath = "$envKqlDir/$RuleName.kql"
     
     if ($DryRun) { 
         Write-Host "📝 Would update KQL file: $kqlPath" -ForegroundColor Yellow
@@ -260,8 +279,8 @@ function Update-KqlFile {
     
     try {
         # Ensure kql directory exists
-        if (!(Test-Path "kql")) {
-            New-Item -ItemType Directory -Path "kql" -Force | Out-Null
+        if (!(Test-Path $envKqlDir)) {
+            New-Item -ItemType Directory -Path $envKqlDir -Force | Out-Null
         }
         
         # Write the query to file
@@ -282,15 +301,18 @@ function Update-BicepConfig {
         [string]$OriginalDisplayName
     )
     
-    $devBicepPath = "env/deploy-dev.bicep"
-    $prodBicepPath = "env/deploy-prod.bicep"
+    $devPaths = Get-OrganizationPaths -OrganizationName $Organization -Environment "dev"
+    $prodPaths = Get-OrganizationPaths -OrganizationName $Organization -Environment "prod"
+    $devBicepPath = $devPaths.BicepPath
+    $prodBicepPath = $prodPaths.BicepPath
     
     # Find the corresponding KQL file for this rule
     $cleanDisplayName = Get-CleanRuleName -DisplayName $OriginalDisplayName
     $generatedRuleName = $cleanDisplayName.ToLower() -replace '[^a-z0-9\s]', '' -replace '\s+', '-'
     
     # Try to find existing KQL file that matches this rule
-    $kqlFiles = Get-ChildItem "kql/*.kql"
+    $paths = Get-OrganizationPaths -OrganizationName $Organization -Environment $Environment
+    $kqlFiles = Get-ChildItem "$($paths.KqlDirectory)/*.kql"
     $matchedKqlFile = $null
     
     # First try exact match
@@ -320,16 +342,43 @@ function Update-BicepConfig {
         Write-Host "   Found matching KQL file: $($matchedKqlFile.Name)" -ForegroundColor Green
         
         # Try to find existing KQL variable in bicep file
-        $bicepPath = if ($Environment -eq 'prod') { $prodBicepPath } else { $devBicepPath }
+        if ($Environment -eq 'prod') {
+            $bicepPath = $prodBicepPath
+        } else {
+            $bicepPath = $devBicepPath
+        }
         $generatedKqlVar = "kql$($generatedRuleName -replace '-', '')" # fallback
         
         if (Test-Path $bicepPath) {
             $bicepContent = Get-Content -Path $bicepPath -Raw
             $kqlFileName = $matchedKqlFile.Name
-            $varPattern = "var\s+(kql\w+)\s*=\s*loadTextContent\('\.\./kql/$([regex]::Escape($kqlFileName))'\)"
+            if ($Environment -eq 'prod') {
+                $relDir = './kql/prod/'
+            } else {
+                $relDir = './kql/dev/'
+            }
+            $varPattern = "var\s+(kql\w+)\s*=\s*loadTextContent\('$([regex]::Escape($relDir))$([regex]::Escape($kqlFileName))'\)"
             if ($bicepContent -match $varPattern) {
                 $generatedKqlVar = $matches[1]
                 Write-Host "   Found existing KQL variable: $generatedKqlVar" -ForegroundColor Green
+            }
+        }
+        
+        # Try to find existing rule name in bicep file
+        $ruleNamePattern = "name:\s*'([^']*)'.*?displayName:\s*'([^']*)'"
+        if ($bicepContent -match $ruleNamePattern) {
+            $matches = [regex]::Matches($bicepContent, $ruleNamePattern, [System.Text.RegularExpressions.RegexOptions]::Singleline)
+            foreach ($match in $matches) {
+                $ruleDisplayName = $match.Groups[2].Value
+                $ruleName = $match.Groups[1].Value
+                # Check if this rule matches our current rule (handle suffixes like (T1078))
+                $cleanRuleDisplayName = $ruleDisplayName -replace '\s*\([^)]*\)$', ''
+                $cleanCurrentDisplayName = $OriginalDisplayName -replace '\s*\([^)]*\)$', ''
+                if ($cleanRuleDisplayName -eq $cleanCurrentDisplayName) {
+                    $generatedRuleName = $ruleName
+                    Write-Host "   Found existing rule name: $generatedRuleName" -ForegroundColor Green
+                    break
+                }
             }
         }
     } else {
@@ -492,6 +541,27 @@ $groupingBlock$entitiesBlock    customDetails: {
                 return $beforeRule + $ruleObj + $afterRule
             } else {
                 Write-Host "   Adding new rule to array" -ForegroundColor Yellow
+                
+                # Check if this is the first rule being added (no existing rules)
+                $isFirstRule = $content -match "var rules = \[\s*// Rules will be populated by sync script\s*\]"
+                
+                if ($isFirstRule) {
+                    # Generate KQL variable declarations for all rules
+                    $kqlVarDeclarations = ""
+                    $paths = Get-OrganizationPaths -OrganizationName $Organization -Environment $Environment
+                    $allKqlFiles = Get-ChildItem "$($paths.KqlDirectory)/*.kql" -ErrorAction SilentlyContinue
+                    
+                    foreach ($kqlFile in $allKqlFiles) {
+                        $ruleName = $kqlFile.BaseName
+                        $kqlVarName = "kql$($ruleName -replace '[^a-zA-Z0-9]', '')"
+                        $relDir = if ($Environment -eq 'prod') { './kql/prod/' } else { './kql/dev/' }
+                        $kqlVarDeclarations += "var $kqlVarName = loadTextContent('$relDir$($kqlFile.Name)')`n"
+                    }
+                    
+                    # Replace the placeholder comment with actual KQL variable declarations
+                    $content = $content -replace "// KQL variables will be populated by sync script", $kqlVarDeclarations.TrimEnd("`n")
+                }
+                
                 # Find the end of the rules array and insert before the closing bracket
                 if ($content -match '(?s)(.*)(\n\s*\])') {
                     $beforeEnd = $matches[1]
@@ -667,7 +737,8 @@ try {
 
     function Get-CanonicalFromRepo {
         param([string]$displayName, [string]$cleanName, [string]$env)
-        $bicepPath = if ($env -eq 'prod') { 'env/deploy-prod.bicep' } else { 'env/deploy-dev.bicep' }
+        $paths = Get-OrganizationPaths -OrganizationName $Organization -Environment $env
+        $bicepPath = $paths.BicepPath
         if (-not (Test-Path $bicepPath)) { return $null }
         $content = Get-Content -Path $bicepPath -Raw
 
@@ -712,9 +783,17 @@ try {
                         $inRuleBlock = $false
                         
                         # Check if this is the rule we're looking for
-                        $escDisplay = [regex]::Escape($displayName)
-                        if (($currentRule -match [regex]::Escape($displayName)) -or
-                            ($currentRule -match "name:\s*'$([regex]::Escape($cleanName))'")) {
+                        # Extract display name from current rule block
+                        $currentDisplayName = ""
+                        if ($currentRule -match "displayName:\s*'([^']*)'") {
+                            $currentDisplayName = $matches[1]
+                        }
+                        
+                        # Check if this is the rule we're looking for
+                        $cleanCurrentDisplayName = $currentDisplayName -replace '\s*\([^)]*\)$', ''
+                        $cleanTargetDisplayName = $displayName -replace '\s*\([^)]*\)$', ''
+                        
+                        if ($cleanCurrentDisplayName -eq $cleanTargetDisplayName) {
                             $block = $currentRule.TrimEnd("`n")
                             break
                         }
@@ -731,17 +810,30 @@ try {
         }
         
         if (-not $block) { return $null }
-        function m($r) { if ($block -match $r) { return $matches[1] } else { return '' } }
+        
+        # Helper function to extract values with better regex patterns
+        function m($r) { 
+            if ($block -match $r) { 
+                return $matches[1] 
+            } else { 
+                return '' 
+            } 
+        }
+        
         function parseList($r) {
             $raw = m $r
             if ([string]::IsNullOrWhiteSpace($raw)) { return @() }
             $items = @()
-            foreach ($part in ($raw -split ',')) {
+            # Handle both single quotes and no quotes
+            $parts = $raw -split ','
+            foreach ($part in $parts) {
                 $x = ($part -replace "'", '').Trim()
                 if ($x) { $items += $x }
             }
             return (@($items) | Sort-Object -Unique)
         }
+        
+        # Extract basic properties with more robust patterns
         $severity = m "severity:\s*'([^']*)'"
         $enabled  = m "enabled:\s*(true|false)"
         $freqRaw  = m "frequency:\s*'([^']*)'"
@@ -804,10 +896,11 @@ try {
         $kqlVar   = m "kql:\s*kql([A-Za-z0-9_-]+)"
         $kqlFile  = ''
         if ($kqlVar) {
-            $varPat = "(?m)^\s*var\s+kql$kqlVar\s*=\s*loadTextContent\('\.\./kql/([^']+)'\)"
-            if ($content -match $varPat) { $kqlFile = $matches[1] }
+            $varPat = "(?m)^\s*var\s+kql$kqlVar\s*=\s*loadTextContent\('\./kql/(dev|prod)/([^']+)'\)"
+            if ($content -match $varPat) { $kqlFile = $matches[2] }
         }
-        $kqlPath  = if ($kqlFile) { "kql/$kqlFile" } else { "kql/$cleanName.kql" }
+        $paths = Get-OrganizationPaths -OrganizationName $Organization -Environment $Environment
+        $kqlPath  = if ($kqlFile) { "$($paths.KqlDirectory)/$kqlFile" } else { "$($paths.KqlDirectory)/$cleanName.kql" }
         $kqlText  = if (Test-Path $kqlPath) { (Get-Content -Path $kqlPath -Raw).Trim() } else { '' }
         [pscustomobject]@{
             displayName       = Get-CleanRuleName -DisplayName $displayName
@@ -870,6 +963,9 @@ try {
         $filteredCount = $rules.Count
         Write-Host "Filtered out vendor rules: $originalCount -> $filteredCount custom rules" -ForegroundColor Yellow
     }
+    
+    # Ensure we keep all distinct rules from the portal (no dedup here)
+    # This allows the repo to reflect the exact set of rules present in the environment.
     
     # Keep a copy to show available rules if a specific name isn't found
     $candidateRules = $rules

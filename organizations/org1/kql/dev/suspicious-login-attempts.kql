@@ -1,0 +1,8 @@
+SigninLogs
+| where TimeGenerated > ago(1h)
+| where ResultType != 0
+| summarize FailedCount = count(), Applications = make_set(AppDisplayName), Locations = make_set(Location), TimeSpan = max(TimeGenerated) - min(TimeGenerated) by IPAddress, bin(TimeGenerated, 5m)
+| where FailedCount >= 5
+| where TimeSpan < 30m
+| take 100
+

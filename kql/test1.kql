@@ -1,1 +1,0 @@
-SecurityEvent| where EventID == 4624| where LogonType == 3| where TimeGenerated > ago(1h)| project TimeGenerated, Computer, SubjectUserName, IpAddress, LogonType

@@ -1,0 +1,6 @@
+SecurityEvent
+| where EventID == 4624
+| where LogonType == 3
+| where TimeGenerated > ago(1h)
+| summarize count() by Account, Computer, IPAddress
+| where count_ > 10

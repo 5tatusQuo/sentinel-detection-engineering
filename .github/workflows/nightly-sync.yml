@@ -45,17 +45,27 @@ jobs:
         tenant-id: ${{ secrets.AZURE_TENANT_ID }}
         subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-    - name: Sync Vendor Rules (Direct to Main)
+    - name: Sync Vendor Rules for All Organizations (Direct to Main)
       run: |
-        echo "🔄 Syncing vendor rules from production (direct to main)..."
+        echo "🔄 Syncing vendor rules for all organizations from production (direct to main)..."
         
-        # Run sync script for vendor rules only (direct to main)
-        pwsh -File scripts/sync-sentinel-changes.ps1 \
-          -ResourceGroup "${{ secrets.SENTINEL_RG_PROD }}" \
-          -WorkspaceName "${{ secrets.SENTINEL_WS_PROD }}" \
-          -Environment "prod" \
-          -VendorRulesOnly:$true \
-          -ForceSync:${{ inputs.force_sync || false }}
+        # Sync using configuration system
+        pwsh -Command "
+          . .\scripts\ConfigManager.ps1
+          `$enabledOrgs = Get-EnabledOrganizations -Environment 'prod'
+          foreach (`$org in `$enabledOrgs) {
+            Write-Host `"Processing organization: `$(`$org.name)`"
+            
+            # Run sync script for vendor rules only (direct to main)
+            .\scripts\sync-sentinel-changes.ps1 `
+              -ResourceGroup `"${{ secrets.SENTINEL_RG_PROD }}`" `
+              -WorkspaceName `"${{ secrets.SENTINEL_WS_PROD }}`" `
+              -Environment `"prod`" `
+              -Organization `$(`$org.name) `
+              -VendorRulesOnly:`$true `
+              -ForceSync:${{ inputs.force_sync || false }}
+          }
+        "
 
     - name: Check for vendor rule changes
       id: check-vendor-changes
@@ -81,17 +91,27 @@ jobs:
         
         echo "✅ Successfully synced vendor rules to main"
 
-    - name: Sync Custom Rules (Feature Branch/PR)
+    - name: Sync Custom Rules for All Organizations (Feature Branch/PR)
       run: |
-        echo "🔄 Checking for custom rules in production that need review..."
+        echo "🔄 Checking for custom rules in all organizations production that need review..."
         
-        # Run sync script for custom rules only (will create feature branch if changes found)
-        pwsh -File scripts/sync-sentinel-changes.ps1 \
-          -ResourceGroup "${{ secrets.SENTINEL_RG_PROD }}" \
-          -WorkspaceName "${{ secrets.SENTINEL_WS_PROD }}" \
-          -Environment "prod" \
-          -CreateBranch:$true \
-          -ForceSync:${{ inputs.force_sync || false }}
+        # Sync using configuration system
+        pwsh -Command "
+          . .\scripts\ConfigManager.ps1
+          `$enabledOrgs = Get-EnabledOrganizations -Environment 'prod'
+          foreach (`$org in `$enabledOrgs) {
+            Write-Host `"Processing organization: `$(`$org.name)`"
+            
+            # Run sync script for custom rules only (will create feature branch if changes found)
+            .\scripts\sync-sentinel-changes.ps1 `
+              -ResourceGroup `"${{ secrets.SENTINEL_RG_PROD }}`" `
+              -WorkspaceName `"${{ secrets.SENTINEL_WS_PROD }}`" `
+              -Environment `"prod`" `
+              -Organization `$(`$org.name) `
+              -CreateBranch:`$true `
+              -ForceSync:${{ inputs.force_sync || false }}
+          }
+        "
 
     - name: Check for custom rule changes
       id: check-custom-changes

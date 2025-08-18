@@ -21,6 +21,11 @@ on:
         required: false
         type: string
         default: ''
+      organization:
+        description: 'Organization to sync (e.g., org1, org2, client-name)'
+        required: true
+        type: string
+        default: ''
       force_sync:
         description: 'Force sync even if no changes detected'
         required: false
@@ -96,6 +101,7 @@ jobs:
           -ResourceGroup "$RG_SECRET" \
           -WorkspaceName "$WS_SECRET" \
           -Environment "${{ inputs.environment }}" \
+          -Organization "${{ inputs.organization }}" \
           -ForceSync:${{ inputs.force_sync }} \
           -RuleName "${{ inputs.rule_name }}"
 
