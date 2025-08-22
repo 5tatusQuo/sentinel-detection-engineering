@@ -542,24 +542,38 @@ $groupingBlock$entitiesBlock    customDetails: {
             } else {
                 Write-Host "   Adding new rule to array" -ForegroundColor Yellow
                 
+                # Always generate KQL variable declarations for all KQL files
+                # This ensures both dev and prod Bicep files have the necessary variables
+
+                # Generate KQL variable declarations for all rules
+                $kqlVarDeclarations = ""
+                $paths = Get-OrganizationPaths -OrganizationName $Organization -Environment $Environment
+                $allKqlFiles = Get-ChildItem "$($paths.KqlDirectory)/*.kql" -ErrorAction SilentlyContinue
+
+                foreach ($kqlFile in $allKqlFiles) {
+                    $ruleName = $kqlFile.BaseName
+                    $kqlVarName = "kql$($ruleName -replace '[^a-zA-Z0-9]', '')"
+                    $relDir = if ($Environment -eq 'prod') { './kql/prod/' } else { './kql/dev/' }
+                    $kqlVarDeclarations += "var $kqlVarName = loadTextContent('$relDir$($kqlFile.Name)')`n"
+                }
+
                 # Check if this is the first rule being added (no existing rules)
                 $isFirstRule = $content -match "var rules = \[\s*// Rules will be populated by sync script\s*\]"
-                
+
                 if ($isFirstRule) {
-                    # Generate KQL variable declarations for all rules
-                    $kqlVarDeclarations = ""
-                    $paths = Get-OrganizationPaths -OrganizationName $Organization -Environment $Environment
-                    $allKqlFiles = Get-ChildItem "$($paths.KqlDirectory)/*.kql" -ErrorAction SilentlyContinue
-                    
-                    foreach ($kqlFile in $allKqlFiles) {
-                        $ruleName = $kqlFile.BaseName
-                        $kqlVarName = "kql$($ruleName -replace '[^a-zA-Z0-9]', '')"
-                        $relDir = if ($Environment -eq 'prod') { './kql/prod/' } else { './kql/dev/' }
-                        $kqlVarDeclarations += "var $kqlVarName = loadTextContent('$relDir$($kqlFile.Name)')`n"
-                    }
-                    
                     # Replace the placeholder comment with actual KQL variable declarations
                     $content = $content -replace "// KQL variables will be populated by sync script", $kqlVarDeclarations.TrimEnd("`n")
+                } else {
+                    # Check if KQL variable declarations already exist, if not add them
+                    $hasKqlVars = $content -match "var kql\w+\s*=\s*loadTextContent"
+                    if (-not $hasKqlVars -and $kqlVarDeclarations) {
+                        # Find the first rule definition and insert KQL variables before it
+                        $rulePattern = "var rules = \["
+                        if ($content -match $rulePattern) {
+                            $kqlVarsWithNewline = $kqlVarDeclarations.TrimEnd("`n") + "`n`n"
+                            $content = $content -replace $rulePattern, "$kqlVarsWithNewline$&"
+                        }
+                    }
                 }
                 
                 # Find the end of the rules array and insert before the closing bracket
@@ -579,15 +593,19 @@ $groupingBlock$entitiesBlock    customDetails: {
         # Update BOTH dev and prod Bicep files to keep environments in sync
         # This ensures that when PRs are merged, prod deployments have the latest rules
 
-        # Update DEV Bicep file
+        # Update DEV Bicep file with dev KQL variables
         $devContent = Update-Content -content $devContent -ruleObj $ruleObject -rname $generatedRuleName
         $devContent | Out-File -FilePath $devBicepPath -Encoding UTF8
         Write-Host "✅ Updated DEV Bicep file for rule: $generatedRuleName" -ForegroundColor Green
 
-        # Update PROD Bicep file
+        # Update PROD Bicep file with prod KQL variables
+        # Temporarily change environment context for prod file update
+        $originalEnvironment = $Environment
+        $Environment = "prod"
         $prodContent = Update-Content -content $prodContent -ruleObj $ruleObject -rname $generatedRuleName
         $prodContent | Out-File -FilePath $prodBicepPath -Encoding UTF8
         Write-Host "✅ Updated PROD Bicep file for rule: $generatedRuleName" -ForegroundColor Green
+        $Environment = $originalEnvironment
         
     }
     catch {
@@ -1162,7 +1180,9 @@ try {
     if ($deletedRules.Count -gt 0 -and -not $DryRun) {
         Write-Host "`n🗑️  Processing deleted rules..." -ForegroundColor Red
         foreach ($deleted in $deletedRules) {
-            Remove-RuleFromBicep -ruleName $deleted.Name -displayName $deleted.DisplayName -env $Environment
+            # Remove from both dev and prod Bicep files
+            Remove-RuleFromBicep -ruleName $deleted.Name -displayName $deleted.DisplayName -env "dev"
+            Remove-RuleFromBicep -ruleName $deleted.Name -displayName $deleted.DisplayName -env "prod"
             Remove-UnusedKqlFile -ruleName $deleted.Name
             $updatedCount++
         }
