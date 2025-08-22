@@ -5,8 +5,9 @@ param workspaceName string = 'sentinel-rg-dev'
 // Load KQL files
 var kqlcustomrule1 = loadTextContent('../kql/dev/customrule1.kql')
 var kqlcustomrule2 = loadTextContent('../kql/dev/customrule2.kql')
+
+// Rules will be populated by sync script
 var rules = [
-  // Rules will be populated by sync script
   {
     name: 'customrule2'
     displayName: 'CustomRule2'
@@ -51,6 +52,7 @@ var rules = [
     }
   }
 ]
+
 // Deploy rules using the main module
 module sentinelRules '../../../infra/sentinel-rules.bicep' = {
   name: 'sentinel-rules-dev'
