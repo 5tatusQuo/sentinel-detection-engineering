@@ -497,9 +497,19 @@ function Update-BicepConfig {
                         if ($inRuleBlock) {
                             $currentRule += $line + "`n"
 
-                            # End of rule block
-                            if ($braceLevel -eq 0) {
-                                $ruleEndLine = $i
+                            # End of rule block: either braceLevel hits 0, or we hit }, { pattern
+                            $isRuleEnd = ($braceLevel -eq 0) -or ($line -match '^\s*\}\s*,\s*\{\s*$')
+                            
+                            if ($isRuleEnd) {
+                                # For }, { pattern, the rule ends at the } not the {
+                                if ($line -match '^\s*\}\s*,\s*\{\s*$') {
+                                    # Remove the ", {" part from current rule and set up for next rule
+                                    $currentRule = $currentRule -replace '\s*,\s*\{\s*\n?$', "`n"
+                                    $ruleEndLine = $i
+                                } else {
+                                    $ruleEndLine = $i
+                                }
+                                
                                 $inRuleBlock = $false
 
                                 # Check if this is the rule we're looking for
@@ -512,7 +522,15 @@ function Update-BicepConfig {
                                         Content = $currentRule.TrimEnd("`n")
                                     }
                                 }
-                                $currentRule = ""
+                                
+                                # If we hit }, { pattern, prepare for next rule
+                                if ($line -match '^\s*\}\s*,\s*\{\s*$') {
+                                    $inRuleBlock = $true
+                                    $ruleStartLine = $i
+                                    $currentRule = "  {`n"  # Start new rule with opening brace
+                                } else {
+                                    $currentRule = ""
+                                }
                             }
                         }
 
