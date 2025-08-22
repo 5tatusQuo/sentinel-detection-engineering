@@ -31,8 +31,7 @@ var rules = [
     customDetails: {
       // TODO: Sync customDetails if needed
     }
-  }
-,
+  },
 {
     name: 'customrule2'
     displayName: 'CustomRule2'
@@ -54,8 +53,7 @@ var rules = [
     customDetails: {
       // TODO: Sync customDetails if needed
     }
-  }
-,
+  },
 {
     name: 'customrule3'
     displayName: 'CustomRule3'
