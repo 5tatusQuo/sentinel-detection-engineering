@@ -233,25 +233,25 @@ function Remove-RuleFromBicep {
 function Remove-UnusedKqlFile {
     param([string]$ruleName)
     
-    # Find potential KQL files for this rule
-    $paths = Get-OrganizationPaths -OrganizationName $Organization -Environment $Environment
-    $kqlPattern = "$($paths.KqlDirectory)/$ruleName*.kql"
-    $kqlFiles = Get-ChildItem $kqlPattern -ErrorAction SilentlyContinue
-    
-    foreach ($kqlFile in $kqlFiles) {
-        # Check if this KQL file is still referenced in any bicep file
-        $isReferenced = $false
-        $paths = Get-OrganizationPaths -OrganizationName $Organization -Environment $Environment
-        $bicepFiles = Get-ChildItem "$($paths.EnvDirectory)/deploy-*.bicep"
-        
-        foreach ($bicepFile in $bicepFiles) {
-            $bicepContent = Get-Content -Path $bicepFile.FullName -Raw
-            $relDir = if ($Environment -eq 'prod') { './kql/prod/' } else { './kql/dev/' }
-            if ($bicepContent -match "loadTextContent\('$([regex]::Escape($relDir))$([regex]::Escape($kqlFile.Name))'\)") {
-                $isReferenced = $true
-                break
-            }
-        }
+                    # Find potential KQL files for this rule
+                $paths = Get-OrganizationPaths -OrganizationName $Organization -Environment $Environment
+                $kqlPattern = "$($paths.KqlDirectory)/$ruleName*.kql"
+                $kqlFiles = Get-ChildItem $kqlPattern -ErrorAction SilentlyContinue
+
+                foreach ($kqlFile in $kqlFiles) {
+                    # Check if this KQL file is still referenced in any bicep file
+                    $isReferenced = $false
+                    $paths = Get-OrganizationPaths -OrganizationName $Organization -Environment $Environment
+                    $bicepFiles = Get-ChildItem "$($paths.EnvDirectory)/deploy-*.bicep"
+
+                    foreach ($bicepFile in $bicepFiles) {
+                        $bicepContent = Get-Content -Path $bicepFile.FullName -Raw
+                        $relDir = if ($Environment -eq 'prod') { '../kql/prod/' } else { '../kql/dev/' }
+                        if ($bicepContent -match "loadTextContent\('$([regex]::Escape($relDir))$([regex]::Escape($kqlFile.Name))'\)") {
+                            $isReferenced = $true
+                            break
+                        }
+                    }
         
         if (-not $isReferenced) {
             # Remove the KQL file
@@ -352,18 +352,14 @@ function Update-BicepConfig {
         if (Test-Path $bicepPath) {
             $bicepContent = Get-Content -Path $bicepPath -Raw
             $kqlFileName = $matchedKqlFile.Name
-            if ($Environment -eq 'prod') {
-                $relDir = './kql/prod/'
-            } else {
-                $relDir = './kql/dev/'
-            }
+            $relDir = if ($Environment -eq 'prod') { '../kql/prod/' } else { '../kql/dev/' }
             $varPattern = "var\s+(kql\w+)\s*=\s*loadTextContent\('$([regex]::Escape($relDir))$([regex]::Escape($kqlFileName))'\)"
             if ($bicepContent -match $varPattern) {
                 $generatedKqlVar = $matches[1]
                 Write-Host "   Found existing KQL variable: $generatedKqlVar" -ForegroundColor Green
             }
         }
-        
+
         # Try to find existing rule name in bicep file
         $ruleNamePattern = "name:\s*'([^']*)'.*?displayName:\s*'([^']*)'"
         if ($bicepContent -match $ruleNamePattern) {
@@ -552,7 +548,7 @@ $groupingBlock$entitiesBlock    customDetails: {
                 # Extract rule name from the rule object being added
                 $ruleName = $rname
                 $kqlVarName = "kql$($ruleName -replace '[^a-zA-Z0-9]', '')"
-                $relDir = if ($Environment -eq 'prod') { './kql/prod/' } else { './kql/dev/' }
+                $relDir = if ($Environment -eq 'prod') { '../kql/prod/' } else { '../kql/dev/' }
                 $kqlVarDeclarations += "var $kqlVarName = loadTextContent('$relDir$($ruleName).kql')`n"
 
                 # Check if this is the first rule being added (no existing rules)
@@ -914,7 +910,7 @@ try {
         $kqlVar   = m "kql:\s*kql([A-Za-z0-9_-]+)"
         $kqlFile  = ''
         if ($kqlVar) {
-            $varPat = "(?m)^\s*var\s+kql$kqlVar\s*=\s*loadTextContent\('\./kql/(dev|prod)/([^']+)'\)"
+            $varPat = "(?m)^\s*var\s+kql$kqlVar\s*=\s*loadTextContent\('\.\./kql/(dev|prod)/([^']+)'\)"
             if ($content -match $varPat) { $kqlFile = $matches[2] }
         }
         $paths = Get-OrganizationPaths -OrganizationName $Organization -Environment $Environment
