@@ -600,7 +600,7 @@ $groupingBlock$entitiesBlock    customDetails: {
                 $tail = $text.Substring($head.Length)
 
                 # Remove existing KQL var lines in the head only
-                $cleanHead = [regex]::Replace($head, '(?m)^var\s+kql\w+\s*=\s*loadTextContent\('\''[^'']+'\'\)\s*$', '')
+                $cleanHead = [regex]::Replace($head, '(?m)^\s*var\s+kql\w+\s*=\s*loadTextContent\([^)]*\)\s*$', '')
 
                 # Insert after the Load KQL files comment if present; otherwise prepend to the head
                 if ($cleanHead -match '(?m)^//\s*Load KQL files\s*$') {
