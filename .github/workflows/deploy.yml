@@ -269,7 +269,7 @@ jobs:
         echo "Deploying all organizations to Dev environment..."
         if [ "${{ needs.detect-deployment-needs.outputs.needs-deployment }}" == "true" ]; then
           # Deploy using the dedicated deployment script
-          pwsh -File scripts/deploy-organizations.ps1 -Environment 'dev' -Verbose
+          pwsh -File scripts/deploy-organizations.ps1 -Environment 'dev'
         else
           echo "No deployment needed - skipping"
         fi
@@ -315,7 +315,7 @@ jobs:
         echo "Deploying all organizations to Production environment..."
         if [ "${{ needs.detect-deployment-needs.outputs.needs-deployment }}" == "true" ]; then
           # Deploy using the dedicated deployment script
-          pwsh -File scripts/deploy-organizations.ps1 -Environment 'prod' -Verbose
+          pwsh -File scripts/deploy-organizations.ps1 -Environment 'prod'
         else
           echo "No deployment needed - skipping"
         fi

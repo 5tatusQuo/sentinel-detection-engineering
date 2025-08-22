@@ -4,10 +4,7 @@
 param(
     [Parameter(Mandatory = $true)]
     [ValidateSet('dev', 'prod')]
-    [string]$Environment,
-
-    [Parameter(Mandatory = $false)]
-    [switch]$Verbose
+    [string]$Environment
 )
 
 # Import ConfigManager
@@ -92,10 +89,6 @@ function Deploy-Organizations {
 
 # Main execution
 try {
-    if ($Verbose) {
-        $VerbosePreference = 'Continue'
-    }
-
     Deploy-Organizations -Environment $Environment
 }
 catch {
