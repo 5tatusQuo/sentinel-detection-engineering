@@ -545,16 +545,16 @@ $groupingBlock$entitiesBlock    customDetails: {
                 # Always generate KQL variable declarations for all KQL files
                 # This ensures both dev and prod Bicep files have the necessary variables
 
-                # Generate KQL variable declarations for all rules
+                # Generate KQL variable declarations for rules that exist in portal
                 $kqlVarDeclarations = ""
                 $paths = Get-OrganizationPaths -OrganizationName $Organization -Environment $Environment
-                $allKqlFiles = Get-ChildItem "$($paths.KqlDirectory)/*.kql" -ErrorAction SilentlyContinue
 
-                foreach ($kqlFile in $allKqlFiles) {
-                    $ruleName = $kqlFile.BaseName
+                # Only generate KQL variables for rules that actually exist in the portal
+                foreach ($portalRule in $rules) {
+                    $ruleName = Get-RuleNameFromDisplay -DisplayName $portalRule.displayName
                     $kqlVarName = "kql$($ruleName -replace '[^a-zA-Z0-9]', '')"
                     $relDir = if ($Environment -eq 'prod') { './kql/prod/' } else { './kql/dev/' }
-                    $kqlVarDeclarations += "var $kqlVarName = loadTextContent('$relDir$($kqlFile.Name)')`n"
+                    $kqlVarDeclarations += "var $kqlVarName = loadTextContent('$relDir$($ruleName).kql')`n"
                 }
 
                 # Check if this is the first rule being added (no existing rules)
