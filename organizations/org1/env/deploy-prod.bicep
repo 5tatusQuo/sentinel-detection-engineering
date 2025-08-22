@@ -43,3 +43,4 @@ module sentinelRules '../../../infra/sentinel-rules.bicep' = {
 
 // Outputs
 output deployedRules array = sentinelRules.outputs.deployedRules
+
