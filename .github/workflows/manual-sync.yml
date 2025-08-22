@@ -152,54 +152,41 @@ jobs:
         echo "missing-rules = ${{ steps.sync.outputs.missing-rules }}"
         echo "create-pr = ${{ steps.pr-decision.outputs.create-pr }}"
 
-    - name: Create Pull Request for file changes
-      if: steps.check-changes.outputs.changes-detected == 'true'
-      uses: peter-evans/create-pull-request@v5
-      with:
-        token: ${{ secrets.GITHUB_TOKEN }}
-        branch: ${{ steps.branch-name.outputs.branch-name }}
-        base: main
-        title: "🔄 Manual Sync from ${{ inputs.environment }} - ${{ steps.date.outputs.today }}"
-        body: |
-          ## Manual Sync from ${{ inputs.environment }} Environment
-          
-          This PR contains changes synced from the ${{ inputs.environment }} Sentinel environment.
-          
-          **Environment:** ${{ inputs.environment }}
-          **Branch:** ${{ steps.branch-name.outputs.branch-name }}
-          **Rule:** ${{ inputs.rule_name || 'All custom rules' }}
-          **Timestamp:** ${{ steps.date.outputs.timestamp }}
-          
-          ### Changes
-          - Synced KQL queries
-          - Updated rule configurations
-          - Custom rules only (vendor rules excluded)
-          
-          Please review the changes before merging.
-        commit-message: "🔄 Manual sync from ${{ inputs.environment }} - ${{ steps.date.outputs.timestamp }}"
-        delete-branch: true
-
-    - name: Create GitOps deployment branch
-      if: steps.sync.outputs.gitops-alert == 'true'
+    - name: Create branch and commit changes
+      if: steps.pr-decision.outputs.create-pr == 'true'
       run: |
-        echo "🚨 Creating GitOps deployment branch for missing rules..."
+        echo "🎯 Creating branch for sync changes and/or GitOps deployment..."
+        
+        # Create and switch to new branch
         git checkout -b ${{ steps.branch-name.outputs.branch-name }}
+        
+        # If there are file changes, commit them
+        if [ "${{ steps.check-changes.outputs.changes-detected }}" == "true" ]; then
+          echo "📝 Committing sync changes..."
+          git add .
+          git commit -m "${{ steps.sync.outputs.gitops-alert == 'true' && '🚨 GitOps sync and deployment required' || '🔄 Manual sync' }} from ${{ inputs.environment }} - ${{ steps.date.outputs.timestamp }}"
+        else
+          echo "📝 No file changes to commit"
+        fi
+        
+        # Push the branch (even if empty for GitOps-only scenarios)
         git push origin ${{ steps.branch-name.outputs.branch-name }}
-        echo "✅ Created branch: ${{ steps.branch-name.outputs.branch-name }}"
+        echo "✅ Created and pushed branch: ${{ steps.branch-name.outputs.branch-name }}"
 
-    - name: Create GitOps deployment PR
-      if: steps.sync.outputs.gitops-alert == 'true'
+    - name: Create Pull Request
+      if: steps.pr-decision.outputs.create-pr == 'true'
       uses: actions/github-script@v7
       with:
         github-token: ${{ secrets.GITHUB_TOKEN }}
         script: |
-          const { data: pullRequest } = await github.rest.pulls.create({
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            title: '🚨 GitOps: Deploy to Prod from ${{ inputs.environment }} - ${{ steps.date.outputs.today }}',
-            head: '${{ steps.branch-name.outputs.branch-name }}',
-            base: 'main',
-            body: `## GitOps Deployment Required from ${{ inputs.environment }} Environment
+          const hasChanges = '${{ steps.check-changes.outputs.changes-detected }}' === 'true';
+          const hasGitOpsAlert = '${{ steps.sync.outputs.gitops-alert }}' === 'true';
+          
+          let title, body;
+          
+          if (hasGitOpsAlert) {
+            title = '🚨 GitOps: Deploy to Prod from ${{ inputs.environment }} - ${{ steps.date.outputs.today }}';
+            body = `## GitOps Deployment Required from ${{ inputs.environment }} Environment
 
           ⚠️ **This PR is required for GitOps deployment!**
 
@@ -216,13 +203,39 @@ jobs:
           **Action Required:** Merging this PR will trigger the deployment workflow to deploy these rules to production.
 
           ### Changes
-          - No file changes (GitOps deployment only)
+          ${hasChanges ? '- Synced KQL queries and configurations' : '- No file changes (GitOps deployment only)'}
           - Custom rules only (vendor rules excluded)
 
-          ⚠️ **Important:** This PR ensures dev/prod environment parity.`
+          ⚠️ **Important:** This PR ensures dev/prod environment parity.`;
+          } else {
+            title = '🔄 Manual Sync from ${{ inputs.environment }} - ${{ steps.date.outputs.today }}';
+            body = `## Manual Sync from ${{ inputs.environment }} Environment
+
+          This PR contains changes synced from the ${{ inputs.environment }} Sentinel environment.
+
+          **Environment:** ${{ inputs.environment }}
+          **Branch:** ${{ steps.branch-name.outputs.branch-name }}
+          **Rule:** ${{ inputs.rule_name || 'All custom rules' }}
+          **Timestamp:** ${{ steps.date.outputs.timestamp }}
+
+          ### Changes
+          - Synced KQL queries
+          - Updated rule configurations
+          - Custom rules only (vendor rules excluded)
+
+          Please review the changes before merging.`;
+          }
+
+          const { data: pullRequest } = await github.rest.pulls.create({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            title: title,
+            head: '${{ steps.branch-name.outputs.branch-name }}',
+            base: 'main',
+            body: body
           });
           
-          console.log(\`🎯 Created GitOps deployment PR #\${pullRequest.number}\`);
+          console.log(\`🎯 Created PR #\${pullRequest.number}: \${pullRequest.title}\`);
           console.log(\`📝 PR URL: \${pullRequest.html_url}\`);
           
           core.setOutput('pr-number', pullRequest.number);
