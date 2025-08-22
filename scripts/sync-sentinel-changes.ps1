@@ -79,55 +79,65 @@ function Get-RuleNameFromDisplay {
 }
 
 function Find-DeletedRules {
-    param([array]$PortalRules, [string]$Organization, [string]$Environment)
+    param([array]$PortalRules, [string]$Organization)
     
     Write-Host "`n🔍 Looking for deleted rules..." -ForegroundColor Cyan
     
-    $paths = Get-OrganizationPaths -OrganizationName $Organization -Environment $Environment
-    $kqlFiles = Get-ChildItem "$($paths.KqlDirectory)/*.kql"
-    
-    $deletedRules = @()
-    
-    foreach ($kqlFile in $kqlFiles) {
-        $ruleBaseName = $kqlFile.BaseName
+    # Check both dev and prod environments for deleted rules
+    foreach ($env in @("dev", "prod")) {
+        Write-Host "   📁 Checking $env environment..." -ForegroundColor Gray
         
-        # Check if this KQL file corresponds to a rule that still exists in the portal
-        $found = $false
-        foreach ($portalRule in $PortalRules) {
-            $generatedName = Get-RuleNameFromDisplay -DisplayName $portalRule.displayName
-            if ($generatedName -eq $ruleBaseName) {
-                $found = $true
-                break
-            }
+        $paths = Get-OrganizationPaths -OrganizationName $Organization -Environment $env
+        if (-not (Test-Path "$($paths.KqlDirectory)/*.kql")) {
+            Write-Host "   ✅ No KQL files found in $env" -ForegroundColor Green
+            continue
         }
         
-        if (-not $found) {
-            $deletedRules += @{
-                RuleName = $ruleBaseName
-                KqlFile = $kqlFile.FullName
-            }
-        }
-    }
-    
-    if ($deletedRules.Count -gt 0) {
-        Write-Host "🗑️  Found $($deletedRules.Count) rules that may have been deleted from portal:" -ForegroundColor Yellow
-        foreach ($rule in $deletedRules) {
-            Write-Host "   - $($rule.RuleName)" -ForegroundColor Red
-        }
+        $kqlFiles = Get-ChildItem "$($paths.KqlDirectory)/*.kql"
+        $deletedRules = @()
         
-        if (-not $DryRun) {
-            $response = Read-Host "Do you want to remove these rules from the repository? (y/N)"
-            if ($response -eq 'y' -or $response -eq 'Y') {
-                foreach ($rule in $deletedRules) {
-                    Remove-RuleFromBicep -RuleName $rule.RuleName -Organization $Organization -Environment $Environment
-                    Remove-UnusedKqlFile -KqlFilePath $rule.KqlFile
+        foreach ($kqlFile in $kqlFiles) {
+            $ruleBaseName = $kqlFile.BaseName
+            
+            # Check if this KQL file corresponds to a rule that still exists in the portal
+            $found = $false
+            foreach ($portalRule in $PortalRules) {
+                $generatedName = Get-RuleNameFromDisplay -DisplayName $portalRule.displayName
+                if ($generatedName -eq $ruleBaseName) {
+                    $found = $true
+                    break
                 }
             }
-        } else {
-            Write-Host "📝 DryRun: Would prompt to remove deleted rules" -ForegroundColor Yellow
+            
+            if (-not $found) {
+                $deletedRules += @{
+                    RuleName = $ruleBaseName
+                    KqlFile = $kqlFile.FullName
+                    Environment = $env
+                }
+            }
         }
-    } else {
-        Write-Host "✅ No deleted rules found" -ForegroundColor Green
+        
+        if ($deletedRules.Count -gt 0) {
+            Write-Host "   🗑️  Found $($deletedRules.Count) deleted rules in $env:" -ForegroundColor Yellow
+            foreach ($rule in $deletedRules) {
+                Write-Host "     - $($rule.RuleName)" -ForegroundColor Red
+            }
+            
+            if (-not $DryRun) {
+                $response = Read-Host "   Do you want to remove these rules from $env? (y/N)"
+                if ($response -eq 'y' -or $response -eq 'Y') {
+                    foreach ($rule in $deletedRules) {
+                        Remove-RuleFromBicep -RuleName $rule.RuleName -Organization $Organization -Environment $rule.Environment
+                        Remove-UnusedKqlFile -KqlFilePath $rule.KqlFile
+                    }
+                }
+            } else {
+                Write-Host "   📝 DryRun: Would prompt to remove deleted rules from $env" -ForegroundColor Yellow
+            }
+        } else {
+            Write-Host "   ✅ No deleted rules found in $env" -ForegroundColor Green
+        }
     }
 }
 
@@ -440,7 +450,7 @@ try {
     }
 
     # Check for deleted rules
-    Find-DeletedRules -PortalRules $customRules -Organization $Organization -Environment $Environment
+    Find-DeletedRules -PortalRules $customRules -Organization $Organization
 
     # Process each custom rule
     $updatedCount = 0
@@ -450,16 +460,19 @@ try {
         # Normalize rule name
         $cleanRuleName = Get-RuleNameFromDisplay -DisplayName $rule.displayName
         
-        # Define KQL file path
-        $paths = Get-OrganizationPaths -OrganizationName $Organization -Environment $Environment
-        $kqlPath = "$($paths.KqlDirectory)/$cleanRuleName.kql"
-        
-        # Check if KQL needs updating
-        $kqlChanged = Update-KqlFile -KqlPath $kqlPath -Query $rule.query
-        if ($kqlChanged) {
-            Write-Host "   ✅ Updated KQL file" -ForegroundColor Green
-        } else {
-            Write-Host "   ✅ KQL unchanged - skipping update" -ForegroundColor Green
+        # Update KQL files for both dev and prod environments
+        $kqlChanged = $false
+        foreach ($env in @("dev", "prod")) {
+            $paths = Get-OrganizationPaths -OrganizationName $Organization -Environment $env
+            $kqlPath = "$($paths.KqlDirectory)/$cleanRuleName.kql"
+            
+            $envKqlChanged = Update-KqlFile -KqlPath $kqlPath -Query $rule.query
+            if ($envKqlChanged) {
+                Write-Host "   ✅ Updated $env KQL file" -ForegroundColor Green
+                $kqlChanged = $true
+            } else {
+                Write-Host "   ✅ $env KQL unchanged - skipping update" -ForegroundColor Green
+            }
         }
         
         # Build canonical representation from portal
