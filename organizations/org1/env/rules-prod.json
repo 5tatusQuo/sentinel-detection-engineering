@@ -42,5 +42,25 @@
       "accountFullName": "Caller"
     },
     "customDetails": {}
+  },
+  {
+    "createIncident": true,
+    "enabled": true,
+    "name": "customrule3",
+    "displayName": "CustomRule3",
+    "kqlFile": "customrule3.kql",
+    "tactics": [
+      "InitialAccess"
+    ],
+    "customDetails": {},
+    "frequency": "0:05:00",
+    "severity": "Medium",
+    "entities": {},
+    "techniques": null,
+    "grouping": {
+      "enabled": null,
+      "matchingMethod": "AllEntities"
+    },
+    "period": "0:05:00"
   }
 ]
