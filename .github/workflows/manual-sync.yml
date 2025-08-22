@@ -152,6 +152,23 @@ jobs:
         echo "missing-rules = ${{ steps.sync.outputs.missing-rules }}"
         echo "create-pr = ${{ steps.pr-decision.outputs.create-pr }}"
 
+    - name: Create GitOps deployment marker
+      if: steps.pr-decision.outputs.create-pr == 'true' && steps.check-changes.outputs.changes-detected == 'false' && steps.sync.outputs.gitops-alert == 'true'
+      run: |
+        echo "Creating GitOps deployment marker for PR creation..."
+        mkdir -p .gitops
+        echo "# GitOps Deployment Required - $(date -u +'%Y-%m-%d %H:%M UTC')" > .gitops/deploy-needed.md
+        echo "" >> .gitops/deploy-needed.md
+        echo "Rules missing in production:" >> .gitops/deploy-needed.md
+        echo "- ${{ steps.sync.outputs.missing-rules }}" >> .gitops/deploy-needed.md
+        echo "" >> .gitops/deploy-needed.md
+        echo "This file triggers PR creation when no code changes exist but deployment is needed." >> .gitops/deploy-needed.md
+        
+        # Add to git so PR can be created
+        git add .gitops/deploy-needed.md
+        
+        echo "📝 Created GitOps deployment marker"
+
     - name: Create Pull Request
       if: steps.pr-decision.outputs.create-pr == 'true'
       uses: peter-evans/create-pull-request@v5
@@ -179,12 +196,20 @@ jobs:
           
           ', steps.sync.outputs.missing-rules) || '' }}### Changes
           ${{ steps.check-changes.outputs.changes-detected == 'true' && '- Synced KQL queries
-          - Updated rule configurations' || '- No file changes (GitOps deployment only)' }}
+          - Updated rule configurations' || '- No file changes (GitOps deployment only)
+          - Added deployment marker file' }}
           - Custom rules only (vendor rules excluded)
           
           ${{ steps.sync.outputs.gitops-alert == 'true' && '⚠️ **Important:** This PR ensures dev/prod environment parity.' || 'Please review the changes before merging.' }}
-        commit-message: "🔄 Manual sync from ${{ inputs.environment }} - ${{ steps.date.outputs.timestamp }}"
+        commit-message: "${{ steps.sync.outputs.gitops-alert == 'true' && '🚨 GitOps deployment required' || '🔄 Manual sync' }} from ${{ inputs.environment }} - ${{ steps.date.outputs.timestamp }}"
         delete-branch: true
+        
+    - name: Clean up GitOps marker
+      if: steps.pr-decision.outputs.create-pr == 'true' && steps.check-changes.outputs.changes-detected == 'false' && steps.sync.outputs.gitops-alert == 'true'
+      run: |
+        # Remove the marker file after PR creation
+        rm -rf .gitops
+        echo "🧹 Cleaned up GitOps deployment marker"
 
     - name: No action needed notification
       if: steps.pr-decision.outputs.create-pr == 'false'

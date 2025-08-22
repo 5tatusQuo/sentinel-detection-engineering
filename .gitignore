@@ -59,6 +59,9 @@ coverage/
 scripts/test-bicep-formatting.ps1
 scripts/test-rule-insertion.ps1
 
+# GitOps deployment markers (temporary files for PR creation)  
+# Note: .gitops/ directory is NOT ignored so workflow can commit marker files
+
 # Note: Bicep files are now maintained as inline format (not auto-generated)
 
 # Node modules (if using any Node.js tools)
