@@ -2,17 +2,9 @@
 @description('Log Analytics workspace name (Sentinel-enabled)')
 param workspaceName string = 'sentinel-rg-prod'
 
-// Load KQL files
 // Define rules for prod environment (higher thresholds, create incidents)
 var rules = [
-  
-    entities: {
-      accountFullName: 'Account'
-      hostName: 'Computer'
-      ipAddress: 'IPAddress'
-    }
-    customDetails: {}
-  }
+  // Rules will be populated by sync script
 ]
 
 // Deploy rules using the main module
@@ -24,3 +16,5 @@ module sentinelRules '../../../infra/sentinel-rules.bicep' = {
   }
 }
 
+// Outputs
+output deployedRules array = sentinelRules.outputs.deployedRules
