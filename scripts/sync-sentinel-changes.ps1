@@ -89,7 +89,7 @@ function Find-DeletedRules {
         
         $paths = Get-OrganizationPaths -OrganizationName $Organization -Environment $env
         if (-not (Test-Path "$($paths.KqlDirectory)/*.kql")) {
-            Write-Host "   ✅ No KQL files found in $env" -ForegroundColor Green
+            Write-Host "   ✅ No KQL files found in ${env}" -ForegroundColor Green
             continue
         }
         
@@ -119,13 +119,13 @@ function Find-DeletedRules {
         }
         
         if ($deletedRules.Count -gt 0) {
-            Write-Host "   🗑️  Found $($deletedRules.Count) deleted rules in $env:" -ForegroundColor Yellow
+            Write-Host "   🗑️  Found $($deletedRules.Count) deleted rules in ${env}:" -ForegroundColor Yellow
             foreach ($rule in $deletedRules) {
                 Write-Host "     - $($rule.RuleName)" -ForegroundColor Red
             }
             
             if (-not $DryRun) {
-                $response = Read-Host "   Do you want to remove these rules from $env? (y/N)"
+                $response = Read-Host "   Do you want to remove these rules from ${env}? (y/N)"
                 if ($response -eq 'y' -or $response -eq 'Y') {
                     foreach ($rule in $deletedRules) {
                         Remove-RuleFromBicep -RuleName $rule.RuleName -Organization $Organization -Environment $rule.Environment
@@ -133,10 +133,10 @@ function Find-DeletedRules {
                     }
                 }
             } else {
-                Write-Host "   📝 DryRun: Would prompt to remove deleted rules from $env" -ForegroundColor Yellow
+                Write-Host "   📝 DryRun: Would prompt to remove deleted rules from ${env}" -ForegroundColor Yellow
             }
         } else {
-            Write-Host "   ✅ No deleted rules found in $env" -ForegroundColor Green
+            Write-Host "   ✅ No deleted rules found in ${env}" -ForegroundColor Green
         }
     }
 }
