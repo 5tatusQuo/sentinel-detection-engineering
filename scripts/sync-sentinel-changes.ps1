@@ -462,14 +462,25 @@ try {
         param([string]$ResourceGroup, [string]$WorkspaceName, [string]$RuleId)
         
         # Use REST API to get complete rule details including entity mappings
-        $subscriptionId = (az account show --query id -o tsv)
+        $subscriptionId = (az account show --query id -o tsv).Trim()
+        if ([string]::IsNullOrEmpty($subscriptionId)) {
+            Write-Host "Error: Could not get subscription ID" -ForegroundColor Red
+            return $null
+        }
+        
         $uri = "/subscriptions/$subscriptionId/resourceGroups/$ResourceGroup/providers/Microsoft.OperationalInsights/workspaces/$WorkspaceName/providers/Microsoft.SecurityInsights/alertRules/$RuleId"
         
         try {
-            $result = az rest --method GET --uri "$uri?api-version=2023-02-01" | ConvertFrom-Json
+            $apiVersion = "api-version=2023-02-01"
+            $fullUrl = $uri + "?" + $apiVersion
+            
+            # Use Invoke-Expression to avoid PowerShell argument parsing issues
+            $cmd = "az rest --method GET --url `"$fullUrl`""
+            $result = Invoke-Expression $cmd | ConvertFrom-Json
             return $result.properties
         } catch {
             Write-Host "Warning: Could not get complete details for rule $RuleId" -ForegroundColor Yellow
+            Write-Host "Error: $($_.Exception.Message)" -ForegroundColor Red
             return $null
         }
     }
@@ -487,8 +498,12 @@ try {
         }
     }
 
-    # Check for deleted rules
-    Find-DeletedRules -PortalRules $customRules -Organization $Organization
+    # Check for deleted rules (only when processing all rules, not when filtering to specific rule)
+    if (-not $RuleName) {
+        Find-DeletedRules -PortalRules $customRules -Organization $Organization
+    } else {
+        Write-Host "`n🎯 Processing specific rule: $RuleName (skipping deletion check)" -ForegroundColor Cyan
+    }
 
     # Process each custom rule
     $updatedCount = 0
