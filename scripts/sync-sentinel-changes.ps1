@@ -235,17 +235,20 @@ function Update-BicepConfig {
     
     Write-Host "   🔄 Using JSON-based rule management..." -ForegroundColor Cyan
     
-    # Update both dev and prod environments using JSON approach
+    Write-Host "   🔄 GitOps: Syncing rule from $Environment environment to deployment configs..." -ForegroundColor Cyan
+    
+    # Update both dev and prod configs to maintain environment parity for deployment pipeline
+    # This ensures when changes are merged to main, prod deployment will have the correct config
     foreach ($env in @("dev", "prod")) {
-        Write-Host "   📝 Updating $env environment..." -ForegroundColor Gray
+        Write-Host "   📝 Updating $env deployment config..." -ForegroundColor Gray
+    
+    $paths = Get-OrganizationPaths -OrganizationName $Organization -Environment $env
+    $rulesJsonPath = "$($paths.EnvDirectory)/rules-$env.json"
         
-        $paths = Get-OrganizationPaths -OrganizationName $Organization -Environment $env
-        $rulesJsonPath = "$($paths.EnvDirectory)/rules-$env.json"
-        
-        if ($DryRun) {
-            Write-Host "   📝 Would update $rulesJsonPath" -ForegroundColor Yellow
-            continue
-        }
+    if ($DryRun) {
+        Write-Host "   📝 Would update $rulesJsonPath" -ForegroundColor Yellow
+        return
+    }
         
         try {
             # Load existing rules JSON
@@ -389,8 +392,9 @@ function Normalize-RulesArray {
 
 # Main execution
 try {
-    Write-Host "🚀 Simplified Sentinel Rules Sync (Clean Version)" -ForegroundColor Green
-    Write-Host "Fetching rules from Sentinel..." -ForegroundColor Cyan
+    Write-Host "🚀 Sentinel Rules GitOps Sync" -ForegroundColor Green
+Write-Host "📡 Fetching rules from $Environment environment ($ResourceGroup/$WorkspaceName)..." -ForegroundColor Cyan
+Write-Host "🔄 Will update both dev & prod configs for deployment pipeline..." -ForegroundColor Gray
     
     # Get rules from Sentinel
     $rules = az sentinel alert-rule list `
@@ -523,7 +527,7 @@ try {
         # Normalize rule name
         $cleanRuleName = Get-RuleNameFromDisplay -DisplayName $rule.displayName
         
-        # Update KQL files for both dev and prod environments
+        # Update KQL files for both environments (maintains dev/prod parity for GitOps)
         $kqlChanged = $false
         foreach ($env in @("dev", "prod")) {
             $paths = Get-OrganizationPaths -OrganizationName $Organization -Environment $env
