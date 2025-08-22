@@ -457,11 +457,11 @@ $groupingBlock$entitiesBlock    customDetails: {
         # Helper to update content: replace if exists, else append to array
         function Update-Content {
             param([string]$content, [string]$ruleObj, [string]$rname)
-            
+
             # Find rule blocks by manually parsing brace levels
             function Find-RuleBlock {
                 param([string]$text, [string]$searchDisplayName, [string]$searchName)
-                
+
                 $lines = $text -split "`n"
                 $inRulesArray = $false
                 $inRuleBlock = $false
@@ -469,37 +469,37 @@ $groupingBlock$entitiesBlock    customDetails: {
                 $ruleStartLine = -1
                 $ruleEndLine = -1
                 $currentRule = ""
-                
+
                 for ($i = 0; $i -lt $lines.Count; $i++) {
                     $line = $lines[$i]
-                    
+
                     # Track if we're in the rules array
                     if ($line -match 'var\s+rules\s*=\s*\[') {
                         $inRulesArray = $true
                         continue
                     }
-                    
+
                     if ($inRulesArray) {
                         # Count braces to track nesting
                         $openBraces = ($line -split '\{').Length - 1
                         $closeBraces = ($line -split '\}').Length - 1
                         $braceLevel += $openBraces - $closeBraces
-                        
+
                         # Start of a rule block
                         if ($line -match '^\s*\{' -and $braceLevel -eq 1 -and -not $inRuleBlock) {
                             $inRuleBlock = $true
                             $ruleStartLine = $i
                             $currentRule = ""
                         }
-                        
+
                         if ($inRuleBlock) {
                             $currentRule += $line + "`n"
-                            
+
                             # End of rule block
                             if ($braceLevel -eq 0) {
                                 $ruleEndLine = $i
                                 $inRuleBlock = $false
-                                
+
                                 # Check if this is the rule we're looking for
                                 if (($searchDisplayName -and $currentRule -match [regex]::Escape($searchDisplayName)) -or
                                     ($searchName -and $currentRule -match "name:\s*'$([regex]::Escape($searchName))'")) {
@@ -513,7 +513,7 @@ $groupingBlock$entitiesBlock    customDetails: {
                                 $currentRule = ""
                             }
                         }
-                        
+
                         # End of rules array
                         if ($line -match '^\s*\]' -and $braceLevel -eq 0) {
                             $inRulesArray = $false
@@ -521,13 +521,112 @@ $groupingBlock$entitiesBlock    customDetails: {
                         }
                     }
                 }
-                
+
                 return @{ Found = $false }
             }
-            
+
+            # Function to extract all rule names from existing Bicep content
+            function Get-AllRuleNames {
+                param([string]$text)
+
+                $ruleNames = @()
+                $lines = $text -split "`n"
+                $inRulesArray = $false
+                $braceLevel = 0
+
+                for ($i = 0; $i -lt $lines.Count; $i++) {
+                    $line = $lines[$i]
+
+                    # Track if we're in the rules array
+                    if ($line -match 'var\s+rules\s*=\s*\[') {
+                        $inRulesArray = $true
+                        continue
+                    }
+
+                    if ($inRulesArray) {
+                        # Count braces to track nesting
+                        $openBraces = ($line -split '\{').Length - 1
+                        $closeBraces = ($line -split '\}').Length - 1
+                        $braceLevel += $openBraces - $closeBraces
+
+                        # Look for rule name
+                        if ($line -match "name:\s*'([^']+)'") {
+                            $ruleNames += $matches[1]
+                        }
+
+                        # End of rules array
+                        if ($line -match '^\s*\]' -and $braceLevel -eq 0) {
+                            $inRulesArray = $false
+                            break
+                        }
+                    }
+                }
+
+                return $ruleNames
+            }
+
+            # Function to generate KQL variables for all rules
+            function Generate-KQL-Variables {
+                param([string]$organization, [string]$environment)
+
+                $kqlVars = ""
+                $relDir = if ($environment -eq 'prod') { '../kql/prod/' } else { '../kql/dev/' }
+                $kqlDir = "organizations/$organization/kql/$environment"
+
+                # Get actual KQL files that exist
+                $kqlFiles = Get-ChildItem -Path $kqlDir -Filter "*.kql" -ErrorAction SilentlyContinue
+
+                foreach ($file in $kqlFiles) {
+                    $ruleName = $file.BaseName  # Gets filename without extension
+                    $kqlVarName = "kql$ruleName"
+                    $kqlVars += "var $kqlVarName = loadTextContent('$relDir$ruleName.kql')`n"
+                }
+
+                return $kqlVars.TrimEnd("`n")
+            }
+
+            # Function to update or add KQL variables in the content
+            function Update-KQL-Variables {
+                param([string]$text, [string]$kqlVariables)
+
+                if ($kqlVariables) {
+                    # Check if KQL variables already exist
+                    if ($text -match "var kql\w+\s*=\s*loadTextContent") {
+                        # Replace existing KQL variables section
+                        $text = $text -replace "(?s)(var kql\w+\s*=\s*loadTextContent[^\n]*\n)+", $kqlVariables
+                    } elseif ($text -match "// KQL variables will be populated by sync script") {
+                        # Replace the placeholder comment with actual KQL variables
+                        $text = $text -replace "// KQL variables will be populated by sync script", "$kqlVariables`n"
+                    } else {
+                        # Add KQL variables before the rules section
+                        $rulePattern = "var rules = \["
+                        if ($text -match $rulePattern) {
+                            $kqlVarsWithNewline = $kqlVariables + "`n`n"
+                            $text = $text -replace $rulePattern, "$kqlVarsWithNewline$&"
+                        }
+                    }
+                }
+
+                return $text
+            }
+
+            # First, get all existing rule names (including the one we're adding/updating)
+            $allRuleNames = Get-AllRuleNames -text $content
+
+            # Add the current rule name if it's not already in the list
+            if ($rname -notin $allRuleNames) {
+                $allRuleNames += $rname
+            }
+
+            # Generate KQL variables for all rules
+            $kqlVarDeclarations = Generate-KQL-Variables -organization $Organization -environment $Environment
+
+            # Update KQL variables in the content
+            $content = Update-KQL-Variables -text $content -kqlVariables $kqlVarDeclarations
+
             # Try to find existing rule
             $result = Find-RuleBlock -text $content -searchDisplayName $OriginalDisplayName -searchName $rname
-            
+
             if ($result.Found) {
                 Write-Host "   Replacing existing rule (lines $($result.StartLine)-$($result.EndLine))" -ForegroundColor Yellow
                 $lines = $content -split "`n"
@@ -537,39 +636,7 @@ $groupingBlock$entitiesBlock    customDetails: {
                 return $beforeRule + $ruleObj + $afterRule
             } else {
                 Write-Host "   Adding new rule to array" -ForegroundColor Yellow
-                
-                # Generate KQL variable declaration for the current rule being added
-                # This ensures the Bicep file has the necessary variable for the rule
 
-                # Generate KQL variable declaration for the current rule being added
-                $kqlVarDeclarations = ""
-                $paths = Get-OrganizationPaths -OrganizationName $Organization -Environment $Environment
-
-                # Extract rule name from the rule object being added
-                $ruleName = $rname
-                $kqlVarName = "kql$($ruleName -replace '[^a-zA-Z0-9]', '')"
-                $relDir = if ($Environment -eq 'prod') { '../kql/prod/' } else { '../kql/dev/' }
-                $kqlVarDeclarations += "var $kqlVarName = loadTextContent('$relDir$($ruleName).kql')`n"
-
-                # Check if this is the first rule being added (no existing rules)
-                $isFirstRule = $content -match "var rules = \[\s*// Rules will be populated by sync script\s*\]"
-
-                if ($isFirstRule) {
-                    # Replace the placeholder comment with actual KQL variable declarations
-                    $content = $content -replace "// KQL variables will be populated by sync script", $kqlVarDeclarations.TrimEnd("`n")
-                } else {
-                    # Check if KQL variable declarations already exist, if not add them
-                    $hasKqlVars = $content -match "var kql\w+\s*=\s*loadTextContent"
-                    if (-not $hasKqlVars -and $kqlVarDeclarations) {
-                        # Find the first rule definition and insert KQL variables before it
-                        $rulePattern = "var rules = \["
-                        if ($content -match $rulePattern) {
-                            $kqlVarsWithNewline = $kqlVarDeclarations.TrimEnd("`n") + "`n`n"
-                            $content = $content -replace $rulePattern, "$kqlVarsWithNewline$&"
-                        }
-                    }
-                }
-                
                 # Find the end of the rules array and insert before the closing bracket
                 if ($content -match '(?s)(.*)(\n\s*\])') {
                     $beforeEnd = $matches[1]
@@ -577,11 +644,51 @@ $groupingBlock$entitiesBlock    customDetails: {
                     # Check if we need a comma
                     $needsComma = $beforeEnd -match '\}\s*$'
                     $comma = if ($needsComma) { ',' } else { '' }
-                    return "$beforeEnd$comma`n$ruleObj$endPart"
+
+                    # Format the rule object to remove leading whitespace and ensure proper comma placement
+                    $formattedRuleObj = $ruleObj.Trim()
+
+                    # If we need a comma, put it on the same line as the previous rule's closing brace
+                    if ($needsComma) {
+                        return "$beforeEnd,$formattedRuleObj$endPart"
+                    } else {
+                        return "$beforeEnd`n$formattedRuleObj$endPart"
+                    }
                 }
             }
-            
+
             return $content
+        }
+
+        # Function to ensure deployment module is present in Bicep content
+        function Ensure-DeploymentModule {
+            param([string]$content, [string]$environment)
+
+            # Check if deployment module already exists
+            if ($content -match "module sentinelRules") {
+                return $content
+            }
+
+            # Add deployment module at the end
+            $moduleName = if ($environment -eq 'prod') { 'sentinel-rules-prod' } else { 'sentinel-rules-dev' }
+
+            $deploymentModule = @"
+
+// Deploy rules using the main module
+module sentinelRules '../../../infra/sentinel-rules.bicep' = {
+  name: '$moduleName'
+  params: {
+    workspaceName: workspaceName
+    rules: rules
+  }
+}
+
+// Outputs
+output deployedRules array = sentinelRules.outputs.deployedRules
+"@
+
+            # Add the deployment module at the end
+            return $content + $deploymentModule
         }
         
         # Update BOTH dev and prod Bicep files to keep environments in sync
@@ -589,6 +696,7 @@ $groupingBlock$entitiesBlock    customDetails: {
 
         # Update DEV Bicep file with dev KQL variables
         $devContent = Update-Content -content $devContent -ruleObj $ruleObject -rname $generatedRuleName
+        $devContent = Ensure-DeploymentModule -content $devContent -environment "dev"
         $devContent | Out-File -FilePath $devBicepPath -Encoding UTF8
         Write-Host "✅ Updated DEV Bicep file for rule: $generatedRuleName" -ForegroundColor Green
 
@@ -597,6 +705,7 @@ $groupingBlock$entitiesBlock    customDetails: {
         $originalEnvironment = $Environment
         $Environment = "prod"
         $prodContent = Update-Content -content $prodContent -ruleObj $ruleObject -rname $generatedRuleName
+        $prodContent = Ensure-DeploymentModule -content $prodContent -environment "prod"
         $prodContent | Out-File -FilePath $prodBicepPath -Encoding UTF8
         Write-Host "✅ Updated PROD Bicep file for rule: $generatedRuleName" -ForegroundColor Green
         $Environment = $originalEnvironment
