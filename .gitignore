@@ -54,6 +54,10 @@ deployment-outputs/
 test-results/
 coverage/
 
+# Test scripts (for development/debugging only)
+scripts/test-bicep-formatting.ps1
+scripts/test-rule-insertion.ps1
+
 # Node modules (if using any Node.js tools)
 node_modules/
 npm-debug.log*

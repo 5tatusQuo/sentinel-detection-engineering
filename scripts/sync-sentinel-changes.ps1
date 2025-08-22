@@ -625,89 +625,20 @@ function Update-BicepConfig {
                 return (($toInsert -join "`n") + "`n" + $head + $tail)
             }
 
-            # Normalize the rules array formatting to ensure '},\n  {' separators and indentation
+            # Normalize the rules array formatting - simplified version that focuses on the critical fixes
             function Normalize-RulesArray {
                 param([string]$text)
 
-                $m = [regex]::Match($text, 'var\s+rules\s*=\s*\[')
-                if (-not $m.Success) { return $text }
-                $arrayStart = $m.Index
-                $openEnd = $m.Index + $m.Length
-                # Find matching closing bracket for the rules array
-                $lvl = 1
-                $closeIdx = -1
-                for ($i = $openEnd; $i -lt $text.Length; $i++) {
-                    $ch = $text[$i]
-                    if ($ch -eq '[') { $lvl++ }
-                    elseif ($ch -eq ']') { $lvl-- }
-                    if ($lvl -eq 0) { $closeIdx = $i; break }
-                }
-                if ($closeIdx -lt 0) { return $text }
-
-                $head = $text.Substring(0, $openEnd)
-                $inside = $text.Substring($openEnd, $closeIdx - $openEnd)
-                $tail = $text.Substring($closeIdx)
-
-                # Extract object blocks by balanced braces
-                $blocks = @()
-                $idx = 0
-                while ($idx -lt $inside.Length) {
-                    while ($idx -lt $inside.Length -and $inside[$idx] -ne '{') { $idx++ }
-                    if ($idx -ge $inside.Length) { break }
-                    $start = $idx
-                    $depth = 1; $idx++
-                    while ($idx -lt $inside.Length -and $depth -gt 0) {
-                        $ch = $inside[$idx]
-                        if ($ch -eq '{') { $depth++ }
-                        elseif ($ch -eq '}') { $depth-- }
-                        $idx++
-                    }
-                    if ($depth -eq 0) {
-                        $end = $idx
-                        $block = $inside.Substring($start, $end - $start).TrimEnd("`r","`n"," ","`t")
-                        # Remove any existing indentation to normalize
-                        $block = ($block -split "`n" | ForEach-Object { $_.TrimStart() }) -join "`n"
-                        $blocks += $block
-                    } else { break }
-                    while ($idx -lt $inside.Length -and ($inside[$idx] -match '[\s,]')) { $idx++ }
-                }
-
-                # Rebuild with normalized separators and indentation
-                $nl = "`n"
-                $rebuilt = $nl
-                for ($b = 0; $b -lt $blocks.Count; $b++) {
-                    # Add proper indentation based on brace depth
-                    $lines = $blocks[$b] -split "`n"
-                    $indentedLines = @()
-                    
-                    for ($l = 0; $l -lt $lines.Count; $l++) {
-                        $line = $lines[$l].TrimStart()
-                        
-                        # Count brace depth before current line
-                        $textBefore = if ($l -gt 0) { ($lines[0..($l-1)] -join "`n") } else { "" }
-                        $openBraces = if ($textBefore) { ($textBefore | Select-String '\{' -AllMatches).Matches.Count } else { 0 }
-                        $closeBraces = if ($textBefore) { ($textBefore | Select-String '\}' -AllMatches).Matches.Count } else { 0 }
-                        $currentDepth = $openBraces - $closeBraces
-                        
-                        if ($line -match '^\}') {
-                            # Closing brace: reduce depth first, then indent
-                            $currentDepth = [Math]::Max(0, $currentDepth - 1)
-                        }
-                        
-                        # Calculate indentation: base 2 spaces + 2 spaces per depth level
-                        $indent = "  " + ("  " * [Math]::Max(0, $currentDepth))
-                        $indentedLines += "$indent$line"
-                    }
-                    
-                    $indentedBlock = $indentedLines -join $nl
-                    if ($b -lt $blocks.Count-1) {
-                        # Use ", {" pattern to avoid Bicep BCP238 error
-                        $rebuilt += $indentedBlock + ", {" + $nl
-                    } else {
-                        $rebuilt += $indentedBlock + $nl
-                    }
-                }
-                return $head + $rebuilt + ']' + $tail.Substring(1)
+                # Since the current files are already properly formatted, this function now just
+                # ensures we don't have BCP238 errors by fixing any problematic comma patterns
+                
+                # Fix any "}, \n  {" patterns that might cause BCP238 errors
+                $fixed = $text -replace '\},\s*\n\s*\{', '}, {'
+                
+                # Ensure consistent line endings
+                $fixed = $fixed -replace '\r\n', "`n" -replace '\r', "`n"
+                
+                return $fixed
             }
 
             # First, get all existing rule names (including the one we're adding/updating)
