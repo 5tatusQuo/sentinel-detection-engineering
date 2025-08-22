@@ -700,7 +700,12 @@ function Update-BicepConfig {
                     }
                     
                     $indentedBlock = $indentedLines -join $nl
-                    $rebuilt += $indentedBlock + ($b -lt $blocks.Count-1 ? ",${nl}" : $nl)
+                    if ($b -lt $blocks.Count-1) {
+                        # Use ", {" pattern to avoid Bicep BCP238 error
+                        $rebuilt += $indentedBlock + ", {" + $nl
+                    } else {
+                        $rebuilt += $indentedBlock + $nl
+                    }
                 }
                 return $head + $rebuilt + ']' + $tail.Substring(1)
             }
