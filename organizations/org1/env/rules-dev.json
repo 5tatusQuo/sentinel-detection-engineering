@@ -7,7 +7,9 @@
     "enabled": true,
     "frequency": "PT5M",
     "period": "PT5M",
-    "tactics": ["InitialAccess"],
+    "tactics": [
+      "InitialAccess"
+    ],
     "techniques": [],
     "createIncident": true,
     "grouping": {
@@ -27,7 +29,9 @@
     "enabled": true,
     "frequency": "PT5M",
     "period": "PT5M",
-    "tactics": ["InitialAccess"],
+    "tactics": [
+      "InitialAccess"
+    ],
     "techniques": [],
     "createIncident": true,
     "grouping": {

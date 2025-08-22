@@ -59,8 +59,7 @@ coverage/
 scripts/test-bicep-formatting.ps1
 scripts/test-rule-insertion.ps1
 
-# Auto-generated Bicep files (generated from JSON)
-organizations/*/env/deploy-*.bicep
+# Note: Bicep files are now maintained as inline format (not auto-generated)
 
 # Node modules (if using any Node.js tools)
 node_modules/
