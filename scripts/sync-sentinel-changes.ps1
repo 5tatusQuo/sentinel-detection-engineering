@@ -390,6 +390,59 @@ function Normalize-RulesArray {
     return $fixed
 }
 
+function Find-MissingRulesInProd {
+    param(
+        [array]$DevRules,
+        [string]$Organization
+    )
+    
+    Write-Host "🔍 Checking for rules missing in prod environment..." -ForegroundColor Cyan
+    
+    try {
+        # Get prod Sentinel rules
+        $prodRules = az sentinel alert-rule list `
+            --resource-group "sentinel-ws-prod" `
+            --workspace-name "sentinel-rg-prod" `
+            --query "[?kind=='Scheduled'].displayName" `
+            -o tsv
+        
+        $prodRuleNames = @()
+        if ($prodRules) {
+            $prodRuleNames = $prodRules -split "`n" | Where-Object { $_ -and $_.Trim() }
+        }
+        
+        Write-Host "   📊 Found $($prodRuleNames.Count) rules in prod Sentinel" -ForegroundColor Gray
+        
+        # Find dev rules missing from prod
+        $missingRules = @()
+        foreach ($devRule in $DevRules) {
+            $ruleName = $devRule.displayName
+            if ($ruleName -notin $prodRuleNames) {
+                $missingRules += $devRule
+                Write-Host "   🚨 Missing in prod: $ruleName" -ForegroundColor Red
+            } else {
+                Write-Host "   ✅ Found in prod: $ruleName" -ForegroundColor Green
+            }
+        }
+        
+        if ($missingRules.Count -gt 0) {
+            Write-Host "🎯 GitOps Action Required: $($missingRules.Count) rules need to be deployed to prod" -ForegroundColor Yellow
+            Write-Host "   This will trigger automatic PR creation for prod deployment..." -ForegroundColor Gray
+            
+            # TODO: Add automatic PR creation logic here
+            # For now, just flag that action is needed
+            return $missingRules
+        } else {
+            Write-Host "✅ All dev rules exist in prod - no GitOps action needed" -ForegroundColor Green
+            return @()
+        }
+        
+    } catch {
+        Write-Host "   ❌ Failed to check prod environment: $($_.Exception.Message)" -ForegroundColor Red
+        return @()
+    }
+}
+
 # Main execution
 try {
     Write-Host "🚀 Sentinel Rules GitOps Sync" -ForegroundColor Green
@@ -571,8 +624,20 @@ Write-Host "🔄 Will update both dev & prod configs for deployment pipeline..."
         $updatedCount++
     }
 
+    # Check for missing rules in prod environment (GitOps drift detection)
+    Write-Host ""
+    $missingInProd = Find-MissingRulesInProd -DevRules $customRules -Organization $Organization
+    
     Write-Host "`n🎉 Sync completed!" -ForegroundColor Green
     Write-Host "📊 Rules processed: $updatedCount" -ForegroundColor Gray
+    
+    if ($missingInProd.Count -gt 0) {
+        Write-Host "🚨 GitOps Alert: $($missingInProd.Count) rules need deployment to prod" -ForegroundColor Yellow
+        foreach ($rule in $missingInProd) {
+            Write-Host "   - $($rule.displayName)" -ForegroundColor Yellow
+        }
+        Write-Host "   💡 Create a PR to deploy these rules to production" -ForegroundColor Cyan
+    }
     
     if ($CreateBranch) {
         Write-Host "📝 Branch creation not implemented in clean version" -ForegroundColor Yellow
