@@ -8,9 +8,9 @@ param workspaceName string = 'sentinel-rg-prod'
 // Define rules for prod environment
 var rules = [
   {
-    name: 'customrule1'
-    displayName: 'CustomRule1'
-    kql: kqlcustomrule1
+    name: 'customrule2'
+    displayName: 'CustomRule2'
+    kql: kqlcustomrule2
     severity: 'Medium'
     enabled: true
     frequency: 'PT5M'
@@ -29,9 +29,9 @@ var rules = [
       // TODO: Sync customDetails if needed
     }
   }, {
-    name: 'customrule2'
-    displayName: 'CustomRule2'
-    kql: kqlcustomrule2
+    name: 'customrule3'
+    displayName: 'CustomRule3'
+    kql: kqlcustomrule3
     severity: 'Medium'
     enabled: true
     frequency: 'PT5M'
@@ -63,4 +63,6 @@ module sentinelRules '../../../infra/sentinel-rules.bicep' = {
 
 // Outputs
 output deployedRules array = sentinelRules.outputs.deployedRules
+
+
 
