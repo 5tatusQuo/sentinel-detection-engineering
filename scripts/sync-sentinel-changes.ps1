@@ -94,8 +94,8 @@ function Get-RuleNameFromDisplay {
     param([string]$DisplayName)
     
     $cleanName = Get-CleanRuleName -DisplayName $DisplayName
-    # Convert to lowercase and replace spaces with hyphens
-    $ruleName = $cleanName.ToLower() -replace '\s+', '-'
+    # Normalize: lowercase and remove all non-alphanumeric characters
+    $ruleName = $cleanName.ToLower() -replace '[^a-z0-9]', ''
     return $ruleName
 }
 
@@ -347,7 +347,7 @@ function Update-BicepConfig {
         } else {
             $bicepPath = $devBicepPath
         }
-        $generatedKqlVar = "kql$($generatedRuleName -replace '-', '')" # fallback
+        $generatedKqlVar = "kql$($generatedRuleName -replace '[^a-z0-9]', '')" # fallback
         
         if (Test-Path $bicepPath) {
             $bicepContent = Get-Content -Path $bicepPath -Raw
@@ -379,7 +379,7 @@ function Update-BicepConfig {
         }
     } else {
         Write-Host "   Warning: No matching KQL file found, using generated name: $generatedRuleName" -ForegroundColor Yellow
-        $generatedKqlVar = "kql$($generatedRuleName -replace '-', '')"
+        $generatedKqlVar = "kql$($generatedRuleName -replace '[^a-z0-9]', '')"
     }
     
     # Use portal as the source of truth for all values
@@ -574,11 +574,12 @@ $groupingBlock$entitiesBlock    customDetails: {
                 $kqlDir = "organizations/$organization/kql/$environment"
 
                 # Get actual KQL files that exist
-                $kqlFiles = Get-ChildItem -Path $kqlDir -Filter "*.kql" -ErrorAction SilentlyContinue
+                $kqlFiles = Get-ChildItem -Path $kqlDir -Filter "*.kql" -ErrorAction SilentlyContinue | Sort-Object Name
 
                 foreach ($file in $kqlFiles) {
                     $ruleName = $file.BaseName  # Gets filename without extension
-                    $kqlVarName = "kql$ruleName"
+                    $sanitized = ($ruleName -replace '[^A-Za-z0-9]', '')
+                    $kqlVarName = "kql$sanitized"
                     $kqlVars += "var $kqlVarName = loadTextContent('$relDir$ruleName.kql')`n"
                 }
 
@@ -589,25 +590,26 @@ $groupingBlock$entitiesBlock    customDetails: {
             function Update-KQL-Variables {
                 param([string]$text, [string]$kqlVariables)
 
-                if ($kqlVariables) {
-                    # Check if KQL variables already exist
-                    if ($text -match "var kql\w+\s*=\s*loadTextContent") {
-                        # Replace existing KQL variables section
-                        $text = $text -replace "(?s)(var kql\w+\s*=\s*loadTextContent[^\n]*\n)+", $kqlVariables
-                    } elseif ($text -match "// KQL variables will be populated by sync script") {
-                        # Replace the placeholder comment with actual KQL variables
-                        $text = $text -replace "// KQL variables will be populated by sync script", "$kqlVariables`n"
-                    } else {
-                        # Add KQL variables before the rules section
-                        $rulePattern = "var rules = \["
-                        if ($text -match $rulePattern) {
-                            $kqlVarsWithNewline = $kqlVariables + "`n`n"
-                            $text = $text -replace $rulePattern, "$kqlVarsWithNewline$&"
-                        }
-                    }
+                if (-not $kqlVariables) { return $text }
+
+                # Anchor before rules array and operate only on the header
+                $anchor = [regex]::Match($text, '(?s)(.*?var\s+rules\s*=\s*\[)')
+                if (-not $anchor.Success) { return $text }
+
+                $head = $anchor.Groups[1].Value
+                $tail = $text.Substring($head.Length)
+
+                # Remove existing KQL var lines in the head only
+                $cleanHead = [regex]::Replace($head, '(?m)^var\s+kql\w+\s*=\s*loadTextContent\('\''[^'']+'\'\)\s*$', '')
+
+                # Insert after the Load KQL files comment if present; otherwise prepend to the head
+                if ($cleanHead -match '(?m)^//\s*Load KQL files\s*$') {
+                    $cleanHead = [regex]::Replace($cleanHead, '(?m)^(//\s*Load KQL files\s*$)', "$1`n$kqlVariables")
+                } else {
+                    $cleanHead = $kqlVariables + "`n" + $cleanHead
                 }
 
-                return $text
+                return $cleanHead + $tail
             }
 
             # First, get all existing rule names (including the one we're adding/updating)
@@ -637,44 +639,23 @@ $groupingBlock$entitiesBlock    customDetails: {
             } else {
                 Write-Host "   Adding new rule to array" -ForegroundColor Yellow
 
-            # Simple approach: insert new rule before closing bracket
-            $closingBracketPattern = '\]\s*$'
-            if ($content -match $closingBracketPattern) {
-                # Create the properly formatted new rule
-                $ruleName = [regex]::Match($ruleObj, "name:\s*'([^']+)'").Groups[1].Value
-                $kqlVarName = "kql$ruleName"
+                # Insert new rule object into rules array with proper comma handling
+                $arrayPattern = '(?s)(var\s+rules\s*=\s*\[)(.*?)(\]\s*)'
+                $m = [regex]::Match($content, $arrayPattern)
+                if ($m.Success) {
+                    $prefix = $m.Groups[1].Value
+                    $inside  = $m.Groups[2].Value
+                    $suffix = $m.Groups[3].Value
 
-                $formattedRule = @()
-                $formattedRule += "  {"
-                $formattedRule += "    name: '$ruleName'"
-                $formattedRule += "    displayName: '$ruleName'"
-                $formattedRule += "    kql: $kqlVarName"
-                $formattedRule += "    severity: 'High'"
-                $formattedRule += "    enabled: true"
-                $formattedRule += "    frequency: 'PT1H'"
-                $formattedRule += "    period: 'PT1H'"
-                $formattedRule += "    tactics: [ 'Discovery' ]"
-                $formattedRule += "    techniques: [ 'T1082' ]"
-                $formattedRule += "    createIncident: true"
-                $formattedRule += "    grouping: {"
-                $formattedRule += "      enabled: true"
-                $formattedRule += "      matchingMethod: 'AllEntities'"
-                $formattedRule += "    }"
-                $formattedRule += "    entities: {"
-                $formattedRule += "      hostName: 'Computer'"
-                $formattedRule += "    }"
-                $formattedRule += "    customDetails: {"
-                $formattedRule += "      // TODO: Sync customDetails if needed"
-                $formattedRule += "    }"
-                $formattedRule += "  }"
+                    $trimInside = $inside.Trim()
+                    if ([string]::IsNullOrWhiteSpace($trimInside)) {
+                        $newInside = "`n$ruleObj`n"
+                    } else {
+                        $newInside = $inside.TrimEnd() + "`n,`n" + $ruleObj + "`n"
+                    }
 
-                $newRuleText = ($formattedRule -join "`n") + "`n"
-
-                # Insert the new rule before the closing bracket
-                $newContent = $content -replace $closingBracketPattern, "`n$newRuleText]"
-
-                return $newContent
-            }
+                    return $prefix + $newInside + $suffix
+                }
             }
 
             return $content

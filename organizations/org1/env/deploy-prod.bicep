@@ -5,7 +5,6 @@ param workspaceName string = 'sentinel-rg-prod'
 // Load KQL files for prod environment
 var kqlcustomrule1 = loadTextContent('../kql/prod/customrule1.kql')
 var kqlcustomrule2 = loadTextContent('../kql/prod/customrule2.kql')
-var kqlcustomrule3 = loadTextContent('../kql/prod/customrule3.kql')
 
 // Define rules for prod environment
 var rules = [
