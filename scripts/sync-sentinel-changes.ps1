@@ -78,6 +78,36 @@ function Get-RuleNameFromDisplay {
     return $cleanName.ToLower() -replace '[^a-z0-9\s]', '' -replace '\s+', '-'
 }
 
+function Convert-TimeSpanToISO8601 {
+    param([string]$TimeSpanValue)
+    
+    if ([string]::IsNullOrEmpty($TimeSpanValue)) {
+        return $TimeSpanValue
+    }
+    
+    # If it's already in ISO 8601 format (starts with PT or P), return as-is
+    if ($TimeSpanValue -match '^P') {
+        return $TimeSpanValue
+    }
+    
+    try {
+        # Try to parse as TimeSpan (e.g., "0:05:00" or "00:05:00")
+        $timespan = [TimeSpan]::Parse($TimeSpanValue)
+        
+        # Convert to ISO 8601 format
+        if ($timespan.TotalDays -ge 1) {
+            return "P$($timespan.Days)DT$($timespan.Hours)H$($timespan.Minutes)M$($timespan.Seconds)S"
+        } elseif ($timespan.TotalHours -ge 1) {
+            return "PT$($timespan.Hours)H$($timespan.Minutes)M"
+        } else {
+            return "PT$($timespan.Minutes)M"
+        }
+    } catch {
+        Write-Host "Warning: Could not convert '$TimeSpanValue' to ISO 8601 format: $($_.Exception.Message)" -ForegroundColor Yellow
+        return $TimeSpanValue
+    }
+}
+
 function Find-DeletedRules {
     param([array]$PortalRules, [string]$Organization)
     
@@ -479,8 +509,8 @@ try {
         $portalCanon = @{
             severity = $rule.severity
             enabled = $rule.enabled
-            frequency = $rule.queryFrequency
-            period = $rule.queryPeriod
+            frequency = Convert-TimeSpanToISO8601 -TimeSpanValue $rule.queryFrequency
+            period = Convert-TimeSpanToISO8601 -TimeSpanValue $rule.queryPeriod
             tactics = $rule.tactics
             techniques = $rule.techniques
             createIncident = $rule.createIncident

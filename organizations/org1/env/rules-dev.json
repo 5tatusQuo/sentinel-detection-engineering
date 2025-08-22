@@ -46,8 +46,8 @@
   {
     "customDetails": {},
     "enabled": true,
-    "period": "0:05:00",
-    "frequency": "0:05:00",
+    "period": "PT5M",
+    "frequency": "PT5M",
     "grouping": {
       "matchingMethod": "AllEntities",
       "enabled": null

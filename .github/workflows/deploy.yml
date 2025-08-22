@@ -204,6 +204,55 @@ jobs:
         echo "Listing infra directory:"
         ls -la infra/ || echo "infra directory not found"
     
+    - name: Validate JSON rule configurations
+      run: |
+        echo "🔍 Validating JSON rule configurations..."
+        
+        # Find all rules JSON files
+        JSON_FILES=$(find organizations/*/env -name "rules-*.json" 2>/dev/null || true)
+        
+        if [ -z "$JSON_FILES" ]; then
+          echo "⚠️ No JSON rule files found"
+        else
+          echo "Found JSON files:"
+          echo "$JSON_FILES"
+          
+          # Validate each JSON file
+          for json_file in $JSON_FILES; do
+            echo "  📄 Validating $json_file..."
+            
+            # Test JSON syntax
+            if ! jq empty "$json_file" 2>/dev/null; then
+              echo "  ❌ Invalid JSON syntax in $json_file"
+              exit 1
+            fi
+            
+            # Check that referenced KQL files exist
+            kql_files=$(jq -r '.[].kqlFile // empty' "$json_file" 2>/dev/null || true)
+            if [ -n "$kql_files" ]; then
+              json_dir=$(dirname "$json_file")
+              env_name=$(basename "$json_file" | sed 's/rules-\(.*\)\.json/\1/')
+              kql_dir="$json_dir/../kql/$env_name"
+              
+              echo "$kql_files" | while read -r kql_file; do
+                if [ -n "$kql_file" ] && [ "$kql_file" != "null" ]; then
+                  kql_path="$kql_dir/$kql_file"
+                  if [ ! -f "$kql_path" ]; then
+                    echo "  ❌ Missing KQL file: $kql_path (referenced in $json_file)"
+                    exit 1
+                  else
+                    echo "    ✅ KQL file exists: $kql_path"
+                  fi
+                fi
+              done
+            fi
+            
+            echo "  ✅ $json_file is valid"
+          done
+        fi
+        
+        echo "✅ JSON rule configurations validated successfully"
+    
     - name: Validate Bicep templates (static)
       run: |
         echo "Validating Bicep templates (static checks)..."
