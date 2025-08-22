@@ -391,26 +391,26 @@ function Update-BicepConfig {
     # Dynamically build entities block using portal values
     $entitiesBlock = ""
     if ($envEntities -and $envEntities.psobject.Properties.Count -gt 0) {
-        $entitiesBlock = "    entities: {`n"
+        $entitiesBlock = "entities: {`n"
         foreach ($prop in $envEntities.psobject.Properties) {
             $entitiesBlock += "      $($prop.Name): '$($prop.Value)'`n"
         }
-        $entitiesBlock += "    }`n"
+        $entitiesBlock += "    }"
     } else {
-        $entitiesBlock = "    entities: {}`n"
+        $entitiesBlock = "entities: {}"
     }
     
     # Dynamically build grouping block using portal values
     $groupingBlock = ""
     if ($PortalCanon.grouping -and $PortalCanon.grouping.psobject.Properties.Count -gt 0) {
-        $groupingBlock = "    grouping: {`n"
+        $groupingBlock = "grouping: {`n"
         foreach ($prop in $PortalCanon.grouping.psobject.Properties) {
             $val = if ($prop.Value -match '^(true|false)$') { $prop.Value } else { "'$($prop.Value)'" }
             $groupingBlock += "      $($prop.Name): $val`n"
         }
-        $groupingBlock += "    }`n"
+        $groupingBlock += "    }"
     } else {
-        $groupingBlock = "    grouping: {}`n"
+        $groupingBlock = "grouping: {}"
     }
     
     # Build tactics and techniques using portal values (properly quoted for Bicep)
@@ -433,7 +433,9 @@ function Update-BicepConfig {
     tactics: [ $tacticsStr ]
     techniques: [ $techniquesStr ]
     createIncident: $(if ($envCreateIncident) { $envCreateIncident } else { 'true' })
-$groupingBlock$entitiesBlock    customDetails: {
+    $($groupingBlock.TrimEnd())
+    $($entitiesBlock.TrimEnd())
+    customDetails: {
       // TODO: Sync customDetails if needed
     }
   }
@@ -623,6 +625,86 @@ $groupingBlock$entitiesBlock    customDetails: {
                 return (($toInsert -join "`n") + "`n" + $head + $tail)
             }
 
+            # Normalize the rules array formatting to ensure '},\n  {' separators and indentation
+            function Normalize-RulesArray {
+                param([string]$text)
+
+                $m = [regex]::Match($text, 'var\s+rules\s*=\s*\[')
+                if (-not $m.Success) { return $text }
+                $arrayStart = $m.Index
+                $openEnd = $m.Index + $m.Length
+                # Find matching closing bracket for the rules array
+                $lvl = 1
+                $closeIdx = -1
+                for ($i = $openEnd; $i -lt $text.Length; $i++) {
+                    $ch = $text[$i]
+                    if ($ch -eq '[') { $lvl++ }
+                    elseif ($ch -eq ']') { $lvl-- }
+                    if ($lvl -eq 0) { $closeIdx = $i; break }
+                }
+                if ($closeIdx -lt 0) { return $text }
+
+                $head = $text.Substring(0, $openEnd)
+                $inside = $text.Substring($openEnd, $closeIdx - $openEnd)
+                $tail = $text.Substring($closeIdx)
+
+                # Extract object blocks by balanced braces
+                $blocks = @()
+                $idx = 0
+                while ($idx -lt $inside.Length) {
+                    while ($idx -lt $inside.Length -and $inside[$idx] -ne '{') { $idx++ }
+                    if ($idx -ge $inside.Length) { break }
+                    $start = $idx
+                    $depth = 1; $idx++
+                    while ($idx -lt $inside.Length -and $depth -gt 0) {
+                        $ch = $inside[$idx]
+                        if ($ch -eq '{') { $depth++ }
+                        elseif ($ch -eq '}') { $depth-- }
+                        $idx++
+                    }
+                    if ($depth -eq 0) {
+                        $end = $idx
+                        $block = $inside.Substring($start, $end - $start).TrimEnd("`r","`n"," ","`t")
+                        # Remove any existing indentation to normalize
+                        $block = ($block -split "`n" | ForEach-Object { $_.TrimStart() }) -join "`n"
+                        $blocks += $block
+                    } else { break }
+                    while ($idx -lt $inside.Length -and ($inside[$idx] -match '[\s,]')) { $idx++ }
+                }
+
+                # Rebuild with normalized separators and indentation
+                $nl = "`n"
+                $rebuilt = $nl
+                for ($b = 0; $b -lt $blocks.Count; $b++) {
+                    # Add proper indentation based on brace depth
+                    $lines = $blocks[$b] -split "`n"
+                    $indentedLines = @()
+                    
+                    for ($l = 0; $l -lt $lines.Count; $l++) {
+                        $line = $lines[$l].TrimStart()
+                        
+                        # Count brace depth before current line
+                        $textBefore = if ($l -gt 0) { ($lines[0..($l-1)] -join "`n") } else { "" }
+                        $openBraces = if ($textBefore) { ($textBefore | Select-String '\{' -AllMatches).Matches.Count } else { 0 }
+                        $closeBraces = if ($textBefore) { ($textBefore | Select-String '\}' -AllMatches).Matches.Count } else { 0 }
+                        $currentDepth = $openBraces - $closeBraces
+                        
+                        if ($line -match '^\}') {
+                            # Closing brace: reduce depth first, then indent
+                            $currentDepth = [Math]::Max(0, $currentDepth - 1)
+                        }
+                        
+                        # Calculate indentation: base 2 spaces + 2 spaces per depth level
+                        $indent = "  " + ("  " * [Math]::Max(0, $currentDepth))
+                        $indentedLines += "$indent$line"
+                    }
+                    
+                    $indentedBlock = $indentedLines -join $nl
+                    $rebuilt += $indentedBlock + ($b -lt $blocks.Count-1 ? ",${nl}" : $nl)
+                }
+                return $head + $rebuilt + ']' + $tail.Substring(1)
+            }
+
             # First, get all existing rule names (including the one we're adding/updating)
             $allRuleNames = Get-AllRuleNames -text $content
 
@@ -646,7 +728,8 @@ $groupingBlock$entitiesBlock    customDetails: {
                 # Replace the rule block
                 $beforeRule = ($lines[0..($result.StartLine-1)] -join "`n") + "`n"
                 $afterRule = "`n" + ($lines[($result.EndLine+1)..($lines.Count-1)] -join "`n")
-                return $beforeRule + $ruleObj + $afterRule
+                $updated = $beforeRule + $ruleObj + $afterRule
+                return (Normalize-RulesArray -text $updated)
             } else {
                 Write-Host "   Adding new rule to array" -ForegroundColor Yellow
  
@@ -680,7 +763,8 @@ $groupingBlock$entitiesBlock    customDetails: {
                             $insertion = "`n$ruleObj`n"
                         }
  
-                        return $prefixPart + $insertion + $suffixPart
+                        $updated = $prefixPart + $insertion + $suffixPart
+                        return (Normalize-RulesArray -text $updated)
                     }
                 }
             }
