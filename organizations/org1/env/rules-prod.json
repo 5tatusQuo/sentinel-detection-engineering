@@ -1,0 +1,73 @@
+[
+  {
+    "name": "customrule1",
+    "displayName": "CustomRule1",
+    "kqlFile": "customrule1.kql",
+    "severity": "Medium",
+    "enabled": true,
+    "frequency": "PT5M",
+    "period": "PT5M",
+    "tactics": [
+      "InitialAccess"
+    ],
+    "techniques": [],
+    "createIncident": true,
+    "grouping": {
+      "enabled": false,
+      "matchingMethod": "AllEntities"
+    },
+    "entities": {
+      "accountFullName": "Caller"
+    },
+    "customDetails": {}
+  },
+  {
+    "name": "customrule2",
+    "displayName": "CustomRule2",
+    "kqlFile": "customrule2.kql",
+    "severity": "Medium",
+    "enabled": true,
+    "frequency": "PT5M",
+    "period": "PT5M",
+    "tactics": [
+      "InitialAccess"
+    ],
+    "techniques": [],
+    "createIncident": true,
+    "grouping": {
+      "enabled": false,
+      "matchingMethod": "AllEntities"
+    },
+    "entities": {
+      "accountFullName": "Caller"
+    },
+    "customDetails": {}
+  },
+  {
+    "customDetails": {},
+    "tactics": [
+      "InitialAccess",
+      "CredentialAccess"
+    ],
+    "enabled": true,
+    "kqlFile": "customrule3.kql",
+    "grouping": {
+      "matchingMethod": "AllEntities",
+      "enabled": false
+    },
+    "entities": {
+      "ipAddress": "IPAddress",
+      "accountFullName": "UserPrincipalName"
+    },
+    "displayName": "CustomRule3",
+    "createIncident": true,
+    "period": "PT10M",
+    "frequency": "PT5M",
+    "techniques": [
+      "T1078",
+      "T1110"
+    ],
+    "severity": "High",
+    "name": "customrule3"
+  }
+]

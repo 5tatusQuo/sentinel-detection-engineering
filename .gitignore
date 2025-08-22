@@ -49,6 +49,7 @@ deployment-outputs/
 !package-lock.json
 !.vscode/extensions.json
 !config/organizations.json
+!organizations/*/env/rules-*.json
 
 # Test outputs
 test-results/
@@ -57,6 +58,9 @@ coverage/
 # Test scripts (for development/debugging only)
 scripts/test-bicep-formatting.ps1
 scripts/test-rule-insertion.ps1
+
+# Auto-generated Bicep files (generated from JSON)
+organizations/*/env/deploy-*.bicep
 
 # Node modules (if using any Node.js tools)
 node_modules/
