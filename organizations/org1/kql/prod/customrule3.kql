@@ -1,0 +1,7 @@
+// CustomRule3 - Test KQL rule
+// Generated automatically by sync script
+AzureActivity
+| where ActivityStatus == "Succeeded"
+| where OperationName == "Create or Update Virtual Machine"
+| project TimeGenerated, ResourceId, Caller, ActivityStatus
+| limit 100

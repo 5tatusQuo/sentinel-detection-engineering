@@ -637,24 +637,44 @@ $groupingBlock$entitiesBlock    customDetails: {
             } else {
                 Write-Host "   Adding new rule to array" -ForegroundColor Yellow
 
-                # Find the end of the rules array and insert before the closing bracket
-                if ($content -match '(?s)(.*)(\n\s*\])') {
-                    $beforeEnd = $matches[1]
-                    $endPart = $matches[2]
-                    # Check if we need a comma
-                    $needsComma = $beforeEnd -match '\}\s*$'
-                    $comma = if ($needsComma) { ',' } else { '' }
+            # Simple approach: insert new rule before closing bracket
+            $closingBracketPattern = '\]\s*$'
+            if ($content -match $closingBracketPattern) {
+                # Create the properly formatted new rule
+                $ruleName = [regex]::Match($ruleObj, "name:\s*'([^']+)'").Groups[1].Value
+                $kqlVarName = "kql$ruleName"
 
-                    # Format the rule object to remove leading whitespace and ensure proper comma placement
-                    $formattedRuleObj = $ruleObj.Trim()
+                $formattedRule = @()
+                $formattedRule += "  {"
+                $formattedRule += "    name: '$ruleName'"
+                $formattedRule += "    displayName: '$ruleName'"
+                $formattedRule += "    kql: $kqlVarName"
+                $formattedRule += "    severity: 'High'"
+                $formattedRule += "    enabled: true"
+                $formattedRule += "    frequency: 'PT1H'"
+                $formattedRule += "    period: 'PT1H'"
+                $formattedRule += "    tactics: [ 'Discovery' ]"
+                $formattedRule += "    techniques: [ 'T1082' ]"
+                $formattedRule += "    createIncident: true"
+                $formattedRule += "    grouping: {"
+                $formattedRule += "      enabled: true"
+                $formattedRule += "      matchingMethod: 'AllEntities'"
+                $formattedRule += "    }"
+                $formattedRule += "    entities: {"
+                $formattedRule += "      hostName: 'Computer'"
+                $formattedRule += "    }"
+                $formattedRule += "    customDetails: {"
+                $formattedRule += "      // TODO: Sync customDetails if needed"
+                $formattedRule += "    }"
+                $formattedRule += "  }"
 
-                    # If we need a comma, put it on the same line as the previous rule's closing brace
-                    if ($needsComma) {
-                        return "$beforeEnd,$formattedRuleObj$endPart"
-                    } else {
-                        return "$beforeEnd`n$formattedRuleObj$endPart"
-                    }
-                }
+                $newRuleText = ($formattedRule -join "`n") + "`n"
+
+                # Insert the new rule before the closing bracket
+                $newContent = $content -replace $closingBracketPattern, "`n$newRuleText]"
+
+                return $newContent
+            }
             }
 
             return $content
