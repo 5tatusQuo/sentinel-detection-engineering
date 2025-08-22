@@ -5,19 +5,26 @@ param workspaceName string = 'sentinel-rg-prod'
 // Define rules for prod environment (higher thresholds, create incidents)
 var rules = [
   // Rules will be populated by sync script
-]
-
-// Deploy using the main template
-module sentinelRules '../../../infra/sentinel-rules.bicep' = {
-  name: 'sentinel-rules-prod'
-  params: {
-    workspaceName: workspaceName
-    rules: rules
+  {
+    name: 'customrule1'
+    displayName: 'CustomRule1'
+    kql: kqlcustomrule1
+    severity: 'Medium'
+    enabled: true
+    frequency: 'PT5M'
+    period: 'PT5M'
+    tactics: [ 'InitialAccess' ]
+    techniques: [  ]
+    createIncident: true
+    grouping: {
+      enabled: false
+      matchingMethod: 'AllEntities'
+    }
+    entities: {
+      accountFullName: 'Caller'
+    }
+    customDetails: {
+      // TODO: Sync customDetails if needed
+    }
   }
-}
-
-// Outputs
-output deployedRules array = sentinelRules.outputs.deployedRules
-
-
-
+]
