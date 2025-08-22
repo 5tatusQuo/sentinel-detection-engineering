@@ -181,62 +181,57 @@ jobs:
         script: |
           const hasChanges = '${{ steps.check-changes.outputs.changes-detected }}' === 'true';
           const hasGitOpsAlert = '${{ steps.sync.outputs.gitops-alert }}' === 'true';
+          const environment = '${{ inputs.environment }}';
+          const branchName = '${{ steps.branch-name.outputs.branch-name }}';
+          const ruleName = '${{ inputs.rule_name }}' || 'All custom rules';
+          const timestamp = '${{ steps.date.outputs.timestamp }}';
+          const today = '${{ steps.date.outputs.today }}';
+          const missingRules = '${{ steps.sync.outputs.missing-rules }}';
           
           let title, body;
           
           if (hasGitOpsAlert) {
-            title = '🚨 GitOps: Deploy to Prod from ${{ inputs.environment }} - ${{ steps.date.outputs.today }}';
-            body = `## GitOps Deployment Required from ${{ inputs.environment }} Environment
-
-          ⚠️ **This PR is required for GitOps deployment!**
-
-          **Environment:** ${{ inputs.environment }}
-          **Branch:** ${{ steps.branch-name.outputs.branch-name }}
-          **Rule:** ${{ inputs.rule_name || 'All custom rules' }}
-          **Timestamp:** ${{ steps.date.outputs.timestamp }}
-
-          ### 🚨 Rules Missing in Production
-
-          The following rules exist in dev but are missing from production:
-          - ${{ steps.sync.outputs.missing-rules }}
-
-          **Action Required:** Merging this PR will trigger the deployment workflow to deploy these rules to production.
-
-          ### Changes
-          ${hasChanges ? '- Synced KQL queries and configurations' : '- No file changes (GitOps deployment only)'}
-          - Custom rules only (vendor rules excluded)
-
-          ⚠️ **Important:** This PR ensures dev/prod environment parity.`;
+            title = '🚨 GitOps: Deploy to Prod from ' + environment + ' - ' + today;
+            body = '## GitOps Deployment Required from ' + environment + ' Environment\n\n' +
+                   '⚠️ **This PR is required for GitOps deployment!**\n\n' +
+                   '**Environment:** ' + environment + '\n' +
+                   '**Branch:** ' + branchName + '\n' +
+                   '**Rule:** ' + ruleName + '\n' +
+                   '**Timestamp:** ' + timestamp + '\n\n' +
+                   '### 🚨 Rules Missing in Production\n\n' +
+                   'The following rules exist in dev but are missing from production:\n' +
+                   '- ' + missingRules + '\n\n' +
+                   '**Action Required:** Merging this PR will trigger the deployment workflow to deploy these rules to production.\n\n' +
+                   '### Changes\n' +
+                   (hasChanges ? '- Synced KQL queries and configurations\n' : '- No file changes (GitOps deployment only)\n') +
+                   '- Custom rules only (vendor rules excluded)\n\n' +
+                   '⚠️ **Important:** This PR ensures dev/prod environment parity.';
           } else {
-            title = '🔄 Manual Sync from ${{ inputs.environment }} - ${{ steps.date.outputs.today }}';
-            body = `## Manual Sync from ${{ inputs.environment }} Environment
-
-          This PR contains changes synced from the ${{ inputs.environment }} Sentinel environment.
-
-          **Environment:** ${{ inputs.environment }}
-          **Branch:** ${{ steps.branch-name.outputs.branch-name }}
-          **Rule:** ${{ inputs.rule_name || 'All custom rules' }}
-          **Timestamp:** ${{ steps.date.outputs.timestamp }}
-
-          ### Changes
-          - Synced KQL queries
-          - Updated rule configurations
-          - Custom rules only (vendor rules excluded)
-
-          Please review the changes before merging.`;
+            title = '🔄 Manual Sync from ' + environment + ' - ' + today;
+            body = '## Manual Sync from ' + environment + ' Environment\n\n' +
+                   'This PR contains changes synced from the ' + environment + ' Sentinel environment.\n\n' +
+                   '**Environment:** ' + environment + '\n' +
+                   '**Branch:** ' + branchName + '\n' +
+                   '**Rule:** ' + ruleName + '\n' +
+                   '**Timestamp:** ' + timestamp + '\n\n' +
+                   '### Changes\n' +
+                   '- Synced KQL queries\n' +
+                   '- Updated rule configurations\n' +
+                   '- Custom rules only (vendor rules excluded)\n\n' +
+                   'Please review the changes before merging.';
           }
 
           const { data: pullRequest } = await github.rest.pulls.create({
             owner: context.repo.owner,
             repo: context.repo.repo,
             title: title,
-            head: '${{ steps.branch-name.outputs.branch-name }}',
+            head: branchName,
             base: 'main',
             body: body
           });
           
-          console.log(\`🎯 Created PR #\${pullRequest.number}: \${pullRequest.title}\`);
-          console.log(\`📝 PR URL: \${pullRequest.html_url}\`);
+          console.log('🎯 Created PR #' + pullRequest.number + ': ' + pullRequest.title);
+          console.log('📝 PR URL: ' + pullRequest.html_url);
           
           core.setOutput('pr-number', pullRequest.number);
           core.setOutput('pr-url', pullRequest.html_url);
