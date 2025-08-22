@@ -640,21 +640,26 @@ $groupingBlock$entitiesBlock    customDetails: {
                 Write-Host "   Adding new rule to array" -ForegroundColor Yellow
 
                 # Insert new rule object into rules array with proper comma handling
-                $arrayPattern = '(?s)(var\s+rules\s*=\s*\[)(.*?)(\]\s*)'
-                $m = [regex]::Match($content, $arrayPattern)
-                if ($m.Success) {
-                    $prefix = $m.Groups[1].Value
-                    $inside  = $m.Groups[2].Value
-                    $suffix = $m.Groups[3].Value
-
-                    $trimInside = $inside.Trim()
-                    if ([string]::IsNullOrWhiteSpace($trimInside)) {
-                        $newInside = "`n$ruleObj`n"
-                    } else {
-                        $newInside = $inside.TrimEnd() + "`n,`n" + $ruleObj + "`n"
+                $rulesMatch = [regex]::Match($content, 'var\s+rules\s*=\s*\[')
+                if ($rulesMatch.Success) {
+                    $start = $rulesMatch.Index + $rulesMatch.Length
+                    $level = 1
+                    $closeIdx = -1
+                    for ($i = $start; $i -lt $content.Length; $i++) {
+                        $ch = $content[$i]
+                        if ($ch -eq '[') { $level++ }
+                        elseif ($ch -eq ']') { $level-- }
+                        if ($level -eq 0) { $closeIdx = $i; break }
                     }
+                    if ($closeIdx -gt -1) {
+                        $prefixPart = $content.Substring(0, $closeIdx)
+                        $inside = $content.Substring($start, $closeIdx - $start)
+                        $suffixPart = $content.Substring($closeIdx)
 
-                    return $prefix + $newInside + $suffix
+                        $needsComma = -not [string]::IsNullOrWhiteSpace($inside.Trim())
+                        $insertion = if ($needsComma) { "`n,`n$ruleObj`n" } else { "`n$ruleObj`n" }
+                        return $prefixPart + $insertion + $suffixPart
+                    }
                 }
             }
 
