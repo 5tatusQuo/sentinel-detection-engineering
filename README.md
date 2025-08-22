@@ -164,13 +164,13 @@ The `config/organizations.json` file defines all organization settings:
       "description": "First client organization",
       "environments": {
         "dev": {
-          "resourceGroup": "sentinel-ws-dev",
-          "workspaceName": "sentinel-rg-dev",
+          "resourceGroup": "sentinel-rg-dev",
+          "workspaceName": "sentinel-ws-dev",
           "enabled": true
         },
         "prod": {
-          "resourceGroup": "sentinel-ws-prod",
-          "workspaceName": "sentinel-rg-prod", 
+          "resourceGroup": "sentinel-rg-prod",
+          "workspaceName": "sentinel-ws-prod", 
           "enabled": true
         }
       },
