@@ -1,42 +1,58 @@
 # Sentinel Detection Rules Infrastructure
 
-This directory contains the "building blocks" for deploying Microsoft Sentinel detection rules. Think of it as the engine that powers your detection rule deployments.
+This directory contains the "building blocks" for deploying Microsoft Sentinel detection rules across multiple organizations. Think of it as the engine that powers your scalable detection rule deployments.
 
 ## 🏗️ How It Works (Simple Version)
 
-Instead of creating a separate file for each detection rule (which would be messy), we use a smart approach:
+Instead of creating a separate file for each detection rule (which would be messy), we use a smart, scalable approach:
 
-1. **One main template** (`sentinel-rules.bicep`) - This is like a "rule factory" that creates multiple rules
-2. **One reusable component** (`modules/scheduledRule.bicep`) - This is the "blueprint" for a single rule
-3. **Environment files** (`env/deploy-*.bicep`) - These tell the factory what rules to make for each environment
-4. **KQL files** (`kql/*.kql`) - These are your actual detection queries
+1. **Configuration System** (`config/organizations.json`) - Central configuration for all organizations and environments
+2. **One main template** (`sentinel-rules.bicep`) - This is like a "rule factory" that creates multiple rules
+3. **One reusable component** (`modules/scheduledRule.bicep`) - This is the "blueprint" for a single rule
+4. **Organization files** (`organizations/orgX/env/deploy-*.bicep`) - These tell the factory what rules to make for each org/environment
+5. **KQL files** (`organizations/orgX/kql/dev|prod/*.kql`) - These are your actual detection queries
 
 ## 🎯 Why This Approach?
 
-✅ **Easy to add rules**: Just add one line to an array, not create new files  
-✅ **Consistent**: All rules follow the same pattern  
-✅ **Maintainable**: Change one thing, it applies to all rules  
-✅ **Readable**: Your KQL queries are in separate files for easy review  
-✅ **Scalable**: Works whether you have 5 rules or 500 rules  
+✅ **Multi-Organization Support**: Manage rules for multiple clients from one repository
+✅ **Configuration-Driven**: Centralized configuration makes adding new organizations simple
+✅ **Environment Separation**: Separate dev/prod KQL files and settings per organization
+✅ **Easy to add rules**: Just add one line to an array, not create new files
+✅ **Consistent**: All rules follow the same pattern across all organizations
+✅ **Maintainable**: Change one thing, it applies to all rules and organizations
+✅ **Readable**: Your KQL queries are in separate files for easy review
+✅ **Scalable**: Works whether you have 5 rules or 500 rules across multiple organizations  
 
 ## 📁 What's in Each File
 
 ```
+config/
+└── organizations.json            # Central configuration for all organizations
+
 infra/
 ├── sentinel-rules.bicep          # The "rule factory" - creates multiple rules
 ├── modules/
 │   └── scheduledRule.bicep       # The "blueprint" for one rule
 ├── README.md                     # This file
-env/
-├── deploy-dev.bicep              # Dev environment rules list
-├── deploy-prod.bicep             # Prod environment rules list
-├── params/
-│   ├── dev.jsonc                 # Dev workspace settings
-│   └── prod.jsonc                # Prod workspace settings
-kql/
-├── uc-powershell-encoded.kql     # PowerShell detection query
-├── suspicious-login-attempts.kql # Login attempts detection query
-└── admin-account-anomaly.kql     # Admin account detection query
+
+organizations/
+└── org1/                         # Organization 1 (repeat for org2, org3, etc.)
+    ├── env/
+    │   ├── deploy-dev.bicep       # Dev environment rules list
+    │   └── deploy-prod.bicep      # Prod environment rules list
+    └── kql/
+        ├── dev/                   # Development KQL queries
+        │   ├── customrule1.kql    # Custom detection query
+        │   └── ...
+        └── prod/                  # Production KQL queries
+            ├── customrule1.kql    # Same queries, prod-ready
+            └── ...
+
+scripts/
+├── sync-sentinel-changes.ps1     # Sync rules from portal to Bicep
+├── ConfigManager.ps1             # Organization configuration management
+├── validate-bicep.ps1            # Bicep validation for all orgs
+└── deploy-organizations.ps1      # Deploy to all organizations
 ```
 
 ## 🚀 Adding a New Rule (Step by Step)
@@ -144,53 +160,145 @@ customDetails: {
 }
 ```
 
+## ⚙️ Configuration System
+
+The repository uses a centralized configuration system to manage multiple organizations:
+
+### config/organizations.json
+```json
+{
+  "organizations": [
+    {
+      "name": "org1",
+      "displayName": "Organization One",
+      "environments": {
+        "dev": {
+          "resourceGroup": "sentinel-rg-dev",
+          "workspaceName": "sentinel-ws-dev",
+          "enabled": true
+        },
+        "prod": {
+          "resourceGroup": "sentinel-rg-prod",
+          "workspaceName": "sentinel-ws-prod",
+          "enabled": true
+        }
+      }
+    }
+  ]
+}
+```
+
+### Adding a New Organization
+1. **Add to Config**: Add a new organization entry to `config/organizations.json`
+2. **Create Structure**: Create the folder structure under `organizations/neworg/`
+3. **Set Enabled**: Set `enabled: true` for environments you want to deploy to
+4. **Deploy**: The automated workflows will handle the rest
+
+### PowerShell Scripts
+- **`ConfigManager.ps1`**: Loads and validates the organization configuration
+- **`deploy-organizations.ps1`**: Deploys to all enabled organizations
+- **`validate-bicep.ps1`**: Validates Bicep files for all organizations
+- **`sync-sentinel-changes.ps1`**: Syncs portal rules to Bicep files
+
 ## 🔄 Deployment
 
-The GitHub Actions workflow automatically:
-1. **Detects changes** in your code
-2. **Validates** your Bicep files
-3. **Deploys** to Dev automatically
-4. **Waits for approval** before Prod
+The GitHub Actions workflows automatically handle deployment:
+
+### Automated Workflows
+1. **Deploy**: Automatically deploys to all enabled organizations when Bicep files change
+2. **Validate**: Validates all organization Bicep files before deployment
+3. **Manual Sync**: Syncs rules from Azure Sentinel portal to Bicep files
+4. **Vendor Sync**: Syncs vendor-built rules for all organizations
+
+### Configuration-Driven Deployment
+- **Central Config**: `config/organizations.json` defines all organizations and environments
+- **Multi-Org Support**: Deploy to multiple organizations with different settings
+- **Environment Separation**: Separate dev/prod deployments with different parameters
 
 ### Manual Deployment
 ```bash
-# Deploy to Dev
+# Deploy to all enabled organizations
+pwsh -File scripts/deploy-organizations.ps1 -Environment 'prod'
+
+# Or deploy specific organization
 az deployment group create \
   --resource-group sentinel-ws-dev \
-  --template-file env/deploy-dev.bicep \
-  --parameters env/params/dev.jsonc
+  --template-file organizations/org1/env/deploy-dev.bicep
 
-# Preview what would be deployed
-az deployment group what-if \
-  --resource-group sentinel-ws-dev \
-  --template-file env/deploy-dev.bicep \
-  --parameters env/params/dev.jsonc
+# Validate all organization Bicep files
+pwsh -File scripts/validate-bicep.ps1
 ```
 
-## 🌍 Environment Differences
+## 🌍 Environment & Organization Differences
 
-- **Dev Environment**: 
+### Environment Differences (per Organization)
+- **Dev Environment**:
   - Lower severity alerts
-  - No incidents created
-  - Focus on testing and validation
+  - No incidents created (testing only)
+  - Focus on validation and development
+  - Separate KQL files in `organizations/orgX/kql/dev/`
 
 - **Prod Environment**:
-  - Higher severity alerts  
-  - Incidents created
+  - Higher severity alerts
+  - Incidents created for response
   - Production-ready settings
+  - Separate KQL files in `organizations/orgX/kql/prod/`
 
-Rules are configured differently in each environment file to match these needs.
+### Organization Differences
+- **Resource Groups**: Each organization has different Azure resource groups
+- **Workspace Names**: Different Log Analytics workspaces per organization
+- **Settings**: Different business rules and alert configurations
+- **KQL Files**: Organization-specific detection queries and thresholds
+
+Each organization is configured in `config/organizations.json` with its own settings.
 
 ## 🆘 Common Issues
 
-### "Property doesn't exist" Error
+### Multi-Organization Issues
+
+#### "Configuration file not found"
+- **Error**: `Configuration file not found: config/organizations.json`
+- **Fix**: Ensure the file exists and is committed to git (not ignored)
+- **Check**: Run `git add config/organizations.json` if needed
+
+#### "Organization not found in config"
+- **Error**: `Organization 'org1' not found in configuration`
+- **Fix**: Add the organization to `config/organizations.json`
+- **Check**: Verify the organization name matches exactly
+
+#### "Resource group/workspace mismatch"
+- **Error**: Deployment fails due to wrong resource group/workspace
+- **Fix**: Verify `config/organizations.json` has correct Azure resource names
+- **Check**: Compare with actual Azure resources
+
+### Bicep Template Issues
+
+#### "Property doesn't exist" Error
 Make sure all your rule objects have the same properties. If you don't need `grouping` or `customDetails`, use empty objects: `grouping: {}` and `customDetails: {}`
 
-### KQL Column Errors
+#### "KQL variable not defined"
+- **Error**: `kqlCustomRule1` is not defined
+- **Fix**: The sync script should generate KQL variable declarations automatically
+- **Check**: Run the manual sync workflow to regenerate Bicep files
+
+#### KQL Column Errors
 If you reference columns in `entities` or `customDetails`, make sure those columns are actually returned by your KQL query.
 
-### Validation Errors
-Run `az bicep build` locally first to catch syntax errors before deploying.
+### Validation & Testing
+
+#### Validation Errors
+Run validation for all organizations:
+```bash
+pwsh -File scripts/validate-bicep.ps1
+```
+
+Or validate a specific organization:
+```bash
+az bicep build --file organizations/org1/env/deploy-dev.bicep
+```
+
+#### Test KQL Queries
+Always test your KQL queries in the Azure Sentinel portal before deploying to avoid runtime errors.
 
 ---
 
