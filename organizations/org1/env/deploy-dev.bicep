@@ -4,11 +4,13 @@
 // Load KQL files based on naming convention
 var kqlcustomrule1 = loadTextContent('../kql/dev/customrule1.kql')
 var kqlcustomrule2 = loadTextContent('../kql/dev/customrule2.kql')
+var kqlcustomrule3 = loadTextContent('../kql/dev/customrule3.kql')
 
 // KQL lookup table for dynamic access
 var kqlLookup = {
   'customrule1.kql': kqlcustomrule1
   'customrule2.kql': kqlcustomrule2
+  'customrule3.kql': kqlcustomrule3
 }
 
 @description('Log Analytics workspace name (Sentinel-enabled)')
@@ -45,3 +47,4 @@ module sentinelRules '../../../infra/sentinel-rules.bicep' = {
 
 // Outputs
 output deployedRules array = sentinelRules.outputs.deployedRules
+
