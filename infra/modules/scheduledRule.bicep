@@ -35,8 +35,25 @@ var groupingDefaults = {
 var g = union(groupingDefaults, grouping)
 
 var entitiesDefaults = {
+  // Account entity mappings
   accountFullName: null
+  accountName: null
+  accountUpnSuffix: null
+  accountDnsDomain: null
+  accountNtDomain: null
+  accountSid: null
+  accountObjectGuid: null
+  
+  // Host entity mappings
   hostName: null
+  hostFullName: null
+  hostDnsDomain: null
+  hostNtDomain: null
+  hostNetBiosName: null
+  hostAzureId: null
+  hostOmsAgentId: null
+  
+  // IP entity mappings
   ipAddress: null
 }
 var e = union(entitiesDefaults, entities)
@@ -87,18 +104,95 @@ resource rule 'Microsoft.SecurityInsights/alertRules@2025-06-01' = {
 
     // Entities: only include non-null mappings
     entityMappings: length(entities) > 0 ? flatten([
+      // Account entity mappings
       e.accountFullName != null ? [{
         entityType: 'Account'
         fieldMappings: [
           { identifier: 'FullName', columnName: string(e.accountFullName) }
         ]
       }] : []
+      e.accountName != null ? [{
+        entityType: 'Account'
+        fieldMappings: [
+          { identifier: 'Name', columnName: string(e.accountName) }
+        ]
+      }] : []
+      e.accountUpnSuffix != null ? [{
+        entityType: 'Account'
+        fieldMappings: [
+          { identifier: 'UPNSuffix', columnName: string(e.accountUpnSuffix) }
+        ]
+      }] : []
+      e.accountDnsDomain != null ? [{
+        entityType: 'Account'
+        fieldMappings: [
+          { identifier: 'DNSDomain', columnName: string(e.accountDnsDomain) }
+        ]
+      }] : []
+      e.accountNtDomain != null ? [{
+        entityType: 'Account'
+        fieldMappings: [
+          { identifier: 'NTDomain', columnName: string(e.accountNtDomain) }
+        ]
+      }] : []
+      e.accountSid != null ? [{
+        entityType: 'Account'
+        fieldMappings: [
+          { identifier: 'Sid', columnName: string(e.accountSid) }
+        ]
+      }] : []
+      e.accountObjectGuid != null ? [{
+        entityType: 'Account'
+        fieldMappings: [
+          { identifier: 'ObjectGuid', columnName: string(e.accountObjectGuid) }
+        ]
+      }] : []
+      
+      // Host entity mappings
       e.hostName != null ? [{
         entityType: 'Host'
         fieldMappings: [
           { identifier: 'HostName', columnName: string(e.hostName) }
         ]
       }] : []
+      e.hostFullName != null ? [{
+        entityType: 'Host'
+        fieldMappings: [
+          { identifier: 'FullName', columnName: string(e.hostFullName) }
+        ]
+      }] : []
+      e.hostDnsDomain != null ? [{
+        entityType: 'Host'
+        fieldMappings: [
+          { identifier: 'DnsDomain', columnName: string(e.hostDnsDomain) }
+        ]
+      }] : []
+      e.hostNtDomain != null ? [{
+        entityType: 'Host'
+        fieldMappings: [
+          { identifier: 'NTDomain', columnName: string(e.hostNtDomain) }
+        ]
+      }] : []
+      e.hostNetBiosName != null ? [{
+        entityType: 'Host'
+        fieldMappings: [
+          { identifier: 'NetBiosName', columnName: string(e.hostNetBiosName) }
+        ]
+      }] : []
+      e.hostAzureId != null ? [{
+        entityType: 'Host'
+        fieldMappings: [
+          { identifier: 'AzureID', columnName: string(e.hostAzureId) }
+        ]
+      }] : []
+      e.hostOmsAgentId != null ? [{
+        entityType: 'Host'
+        fieldMappings: [
+          { identifier: 'OMSAgentID', columnName: string(e.hostOmsAgentId) }
+        ]
+      }] : []
+      
+      // IP entity mappings
       e.ipAddress != null ? [{
         entityType: 'IP'
         fieldMappings: [

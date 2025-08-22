@@ -457,7 +457,39 @@ try {
                 if ($mapping.entityType -and $mapping.fieldMappings) {
                     foreach ($field in $mapping.fieldMappings) {
                         if ($field.identifier -and $field.columnName) {
-                            $result[$field.identifier] = $field.columnName
+                            # Map Azure Sentinel field identifiers to our internal field names
+                            switch ($mapping.entityType) {
+                                "Account" {
+                                    switch ($field.identifier) {
+                                        "FullName" { $result["accountFullName"] = $field.columnName }
+                                        "Name" { $result["accountName"] = $field.columnName }
+                                        "UPNSuffix" { $result["accountUpnSuffix"] = $field.columnName }
+                                        "DNSDomain" { $result["accountDnsDomain"] = $field.columnName }
+                                        "NTDomain" { $result["accountNtDomain"] = $field.columnName }
+                                        "Sid" { $result["accountSid"] = $field.columnName }
+                                        "ObjectGuid" { $result["accountObjectGuid"] = $field.columnName }
+                                    }
+                                }
+                                "Host" {
+                                    switch ($field.identifier) {
+                                        "HostName" { $result["hostName"] = $field.columnName }
+                                        "FullName" { $result["hostFullName"] = $field.columnName }
+                                        "DnsDomain" { $result["hostDnsDomain"] = $field.columnName }
+                                        "NTDomain" { $result["hostNtDomain"] = $field.columnName }
+                                        "NetBiosName" { $result["hostNetBiosName"] = $field.columnName }
+                                        "AzureID" { $result["hostAzureId"] = $field.columnName }
+                                        "OMSAgentID" { $result["hostOmsAgentId"] = $field.columnName }
+                                    }
+                                }
+                                "IP" {
+                                    switch ($field.identifier) {
+                                        "Address" { $result["ipAddress"] = $field.columnName }
+                                    }
+                                }
+                                default {
+                                    Write-Host "Warning: Unknown entity type '$($mapping.entityType)' with identifier '$($field.identifier)'" -ForegroundColor Yellow
+                                }
+                            }
                         }
                     }
                 }

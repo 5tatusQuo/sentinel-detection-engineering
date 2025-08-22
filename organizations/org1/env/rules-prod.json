@@ -55,7 +55,9 @@
     "severity": "Medium",
     "period": "PT5M",
     "enabled": true,
-    "entities": {},
+    "entities": {
+      "accountFullName": "Caller"
+    },
     "createIncident": true,
     "tactics": [
       "InitialAccess"
