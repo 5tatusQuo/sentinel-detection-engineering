@@ -263,13 +263,5 @@ function Test-OrganizationConfig {
     }
 }
 
-# Export functions for use in other scripts
-Export-ModuleMember -Function @(
-    'Get-OrganizationConfig',
-    'Get-Organizations', 
-    'Get-OrganizationByName',
-    'Get-OrganizationEnvironment',
-    'Get-EnabledOrganizations',
-    'Get-OrganizationPaths',
-    'Test-OrganizationConfig'
-)
+# Functions are automatically available when dot-sourced
+# Export-ModuleMember is not needed for dot-sourcing

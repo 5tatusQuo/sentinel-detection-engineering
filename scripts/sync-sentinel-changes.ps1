@@ -45,13 +45,13 @@ param(
     [string]$Organization = "org1",
     
     [Parameter(Mandatory = $false)]
-    [bool]$CreateBranch = $true,
-    
+    [switch]$CreateBranch,
+
     [Parameter(Mandatory = $false)]
-    [bool]$ForceSync = $false,
-    
+    [switch]$ForceSync,
+
     [Parameter(Mandatory = $false)]
-    [bool]$VendorRulesOnly = $false,
+    [switch]$VendorRulesOnly,
     
     [Parameter(Mandatory = $false)]
     [switch]$DryRun

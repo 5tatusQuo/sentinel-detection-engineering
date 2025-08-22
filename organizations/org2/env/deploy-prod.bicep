@@ -3,25 +3,9 @@
 param workspaceName string = 'sentinel-rg-prod'
 
 // Load KQL files
-var kqlExample = loadTextContent('../kql/prod/example-rule.kql')
-
 // Define rules for prod environment (higher thresholds, create incidents)
 var rules = [
-  {
-    name: 'example-rule'
-    displayName: '[PROD] [ORG2] – Example Detection Rule'
-    kql: kqlExample
-    severity: 'Medium'
-    enabled: true
-    frequency: 'PT1H'
-    period: 'PT1H'
-    tactics: [ 'InitialAccess' ]
-    techniques: [ 'T1078' ]
-    createIncident: true
-    grouping: {
-      enabled: true
-      matchingMethod: 'AllEntities'
-    }
+  
     entities: {
       accountFullName: 'Account'
       hostName: 'Computer'
@@ -39,3 +23,4 @@ module sentinelRules '../../../infra/sentinel-rules.bicep' = {
     rules: rules
   }
 }
+
