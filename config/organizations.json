@@ -21,34 +21,6 @@
         "syncCustomRules": true,
         "createFeatureBranches": true
       }
-    },
-    {
-      "name": "org2", 
-      "displayName": "Organization 2",
-      "description": "Second client organization",
-      "environments": {
-        "dev": {
-          "resourceGroup": "sentinel-ws-dev",
-          "workspaceName": "sentinel-rg-dev", 
-          "enabled": true
-        },
-        "prod": {
-          "resourceGroup": "sentinel-ws-prod",
-          "workspaceName": "sentinel-rg-prod",
-          "enabled": true
-        }
-      },
-      "settings": {
-        "syncVendorRules": true,
-        "syncCustomRules": true,
-        "createFeatureBranches": true
-      }
     }
-  ],
-  "globalSettings": {
-    "defaultEnvironment": "dev",
-    "syncSchedule": "0 2 * * *",
-    "maxConcurrentDeployments": 3,
-    "enableDryRun": false
-  }
+  ]
 }
