@@ -125,17 +125,27 @@ var rules = [
     customDetails: {
       // TODO: Sync customDetails if needed
     }
+  },
+  {
+    name: 'customrule1'
+    displayName: 'CustomRule1'
+    kql: kqlcustomrule1
+    severity: 'Medium'
+    enabled: true
+    frequency: 'PT5M'
+    period: 'PT5M'
+    tactics: [ 'InitialAccess' ]
+    techniques: [  ]
+    createIncident: true
+    grouping: {
+      enabled: false
+      matchingMethod: 'AllEntities'
+    }
+    entities: {
+      accountFullName: 'Caller'
+    }
+    customDetails: {
+      // TODO: Sync customDetails if needed
+    }
   }
 ]
-
-// Deploy using the main template
-module sentinelRules '../../../infra/sentinel-rules.bicep' = {
-  name: 'sentinel-rules-dev'
-  params: {
-    workspaceName: workspaceName
-    rules: rules
-  }
-}
-
-// Outputs
-output deployedRules array = sentinelRules.outputs.deployedRules
