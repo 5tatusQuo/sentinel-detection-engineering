@@ -82,20 +82,7 @@ jobs:
       with:
         fetch-depth: 2  # Need at least 2 commits to detect changes
     
-    - name: Clean up GitOps deployment markers
-      run: |
-        if [ -d ".gitops" ]; then
-          echo "🧹 Removing GitOps deployment markers..."
-          rm -rf .gitops
-          if [ -n "$(git status --porcelain)" ]; then
-            git add .
-            git commit -m "Clean up GitOps deployment markers [skip ci]"
-          fi
-          echo "✅ GitOps markers cleaned up"
-        else
-          echo "✅ No GitOps markers to clean up"
-        fi
-    
+
     - name: Debug - Workflow Trigger Info
       run: |
         echo "=== WORKFLOW DEBUG INFO ==="
