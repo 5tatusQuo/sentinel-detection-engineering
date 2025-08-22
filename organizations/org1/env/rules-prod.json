@@ -42,27 +42,5 @@
       "accountFullName": "Caller"
     },
     "customDetails": {}
-  },
-  {
-    "grouping": {
-      "enabled": null,
-      "matchingMethod": "AllEntities"
-    },
-    "customDetails": {},
-    "kqlFile": "customrule3.kql",
-    "name": "customrule3",
-    "frequency": "PT5M",
-    "severity": "Medium",
-    "period": "PT5M",
-    "enabled": true,
-    "entities": {
-      "accountFullName": "Caller"
-    },
-    "createIncident": true,
-    "tactics": [
-      "InitialAccess"
-    ],
-    "techniques": null,
-    "displayName": "CustomRule3"
   }
 ]
