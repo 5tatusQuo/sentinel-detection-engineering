@@ -542,20 +542,18 @@ $groupingBlock$entitiesBlock    customDetails: {
             } else {
                 Write-Host "   Adding new rule to array" -ForegroundColor Yellow
                 
-                # Always generate KQL variable declarations for all KQL files
-                # This ensures both dev and prod Bicep files have the necessary variables
+                # Generate KQL variable declaration for the current rule being added
+                # This ensures the Bicep file has the necessary variable for the rule
 
-                # Generate KQL variable declarations for rules that exist in portal
+                # Generate KQL variable declaration for the current rule being added
                 $kqlVarDeclarations = ""
                 $paths = Get-OrganizationPaths -OrganizationName $Organization -Environment $Environment
 
-                # Only generate KQL variables for rules that actually exist in the portal
-                foreach ($portalRule in $rules) {
-                    $ruleName = Get-RuleNameFromDisplay -DisplayName $portalRule.displayName
-                    $kqlVarName = "kql$($ruleName -replace '[^a-zA-Z0-9]', '')"
-                    $relDir = if ($Environment -eq 'prod') { './kql/prod/' } else { './kql/dev/' }
-                    $kqlVarDeclarations += "var $kqlVarName = loadTextContent('$relDir$($ruleName).kql')`n"
-                }
+                # Extract rule name from the rule object being added
+                $ruleName = $rname
+                $kqlVarName = "kql$($ruleName -replace '[^a-zA-Z0-9]', '')"
+                $relDir = if ($Environment -eq 'prod') { './kql/prod/' } else { './kql/dev/' }
+                $kqlVarDeclarations += "var $kqlVarName = loadTextContent('$relDir$($ruleName).kql')`n"
 
                 # Check if this is the first rule being added (no existing rules)
                 $isFirstRule = $content -match "var rules = \[\s*// Rules will be populated by sync script\s*\]"
