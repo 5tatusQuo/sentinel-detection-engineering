@@ -576,16 +576,18 @@ $groupingBlock$entitiesBlock    customDetails: {
             return $content
         }
         
-        # Update appropriate Bicep file based on environment
-        if ($Environment -eq "prod") {
-            $prodContent = Update-Content -content $prodContent -ruleObj $ruleObject -rname $generatedRuleName
-            $prodContent | Out-File -FilePath $prodBicepPath -Encoding UTF8
-            Write-Host "✅ Updated PROD Bicep file for rule: $generatedRuleName" -ForegroundColor Green
-        } else {
-            $devContent = Update-Content -content $devContent -ruleObj $ruleObject -rname $generatedRuleName
-            $devContent | Out-File -FilePath $devBicepPath -Encoding UTF8
-            Write-Host "✅ Updated DEV Bicep file for rule: $generatedRuleName" -ForegroundColor Green
-        }
+        # Update BOTH dev and prod Bicep files to keep environments in sync
+        # This ensures that when PRs are merged, prod deployments have the latest rules
+
+        # Update DEV Bicep file
+        $devContent = Update-Content -content $devContent -ruleObj $ruleObject -rname $generatedRuleName
+        $devContent | Out-File -FilePath $devBicepPath -Encoding UTF8
+        Write-Host "✅ Updated DEV Bicep file for rule: $generatedRuleName" -ForegroundColor Green
+
+        # Update PROD Bicep file
+        $prodContent = Update-Content -content $prodContent -ruleObj $ruleObject -rname $generatedRuleName
+        $prodContent | Out-File -FilePath $prodBicepPath -Encoding UTF8
+        Write-Host "✅ Updated PROD Bicep file for rule: $generatedRuleName" -ForegroundColor Green
         
     }
     catch {
@@ -1165,7 +1167,41 @@ try {
             $updatedCount++
         }
     }
-    
+
+    # Sync KQL files between dev and prod to keep environments in sync
+    if (-not $DryRun -and ($updatedCount -gt 0 -or $deletedRules.Count -gt 0)) {
+        Write-Host "`n🔄 Syncing KQL files between dev and prod environments..." -ForegroundColor Cyan
+
+        $devKqlPath = "organizations/$Organization/kql/dev"
+        $prodKqlPath = "organizations/$Organization/kql/prod"
+
+        # Create prod directory if it doesn't exist
+        if (-not (Test-Path $prodKqlPath)) {
+            New-Item -ItemType Directory -Path $prodKqlPath -Force | Out-Null
+            Write-Host "  📁 Created prod KQL directory: $prodKqlPath" -ForegroundColor Blue
+        }
+
+        # Copy all KQL files from dev to prod
+        $devKqlFiles = Get-ChildItem "$devKqlPath/*.kql" -ErrorAction SilentlyContinue
+        if ($devKqlFiles.Count -gt 0) {
+            foreach ($kqlFile in $devKqlFiles) {
+                $prodFilePath = "$prodKqlPath/$($kqlFile.Name)"
+                Copy-Item -Path $kqlFile.FullName -Destination $prodFilePath -Force
+                Write-Host "  📋 Copied $($kqlFile.Name) to prod environment" -ForegroundColor Blue
+            }
+        }
+
+        # Clean up any orphaned KQL files in prod that don't exist in dev
+        $prodKqlFiles = Get-ChildItem "$prodKqlPath/*.kql" -ErrorAction SilentlyContinue
+        foreach ($prodFile in $prodKqlFiles) {
+            $devFilePath = "$devKqlPath/$($prodFile.Name)"
+            if (-not (Test-Path $devFilePath)) {
+                Remove-Item $prodFile.FullName -Force
+                Write-Host "  🗑️  Removed orphaned KQL file from prod: $($prodFile.Name)" -ForegroundColor Yellow
+            }
+        }
+    }
+
     if ($allChanges.Count -gt 0) {
         Write-Host "`n📝 Detected changes:" -ForegroundColor Cyan
         foreach ($c in $allChanges) {
