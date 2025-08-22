@@ -568,21 +568,21 @@ $groupingBlock$entitiesBlock    customDetails: {
             # Function to generate KQL variables for all rules
             function Generate-KQL-Variables {
                 param([string]$organization, [string]$environment)
-
+ 
                 $kqlVars = ""
                 $relDir = if ($environment -eq 'prod') { '../kql/prod/' } else { '../kql/dev/' }
                 $kqlDir = "organizations/$organization/kql/$environment"
-
+ 
                 # Get actual KQL files that exist
                 $kqlFiles = Get-ChildItem -Path $kqlDir -Filter "*.kql" -ErrorAction SilentlyContinue | Sort-Object Name
-
+ 
                 foreach ($file in $kqlFiles) {
                     $ruleName = $file.BaseName  # Gets filename without extension
                     $sanitized = ($ruleName -replace '[^A-Za-z0-9]', '')
                     $kqlVarName = "kql$sanitized"
                     $kqlVars += "var $kqlVarName = loadTextContent('$relDir$ruleName.kql')`n"
                 }
-
+ 
                 return $kqlVars.TrimEnd("`n")
             }
 
@@ -599,17 +599,28 @@ $groupingBlock$entitiesBlock    customDetails: {
                 $head = $anchor.Groups[1].Value
                 $tail = $text.Substring($head.Length)
 
-                # Remove existing KQL var lines in the head only
-                $cleanHead = [regex]::Replace($head, '(?m)^\s*var\s+kql\w+\s*=\s*loadTextContent\([^)]*\)\s*$', '')
-
                 # Insert after the Load KQL files comment if present; otherwise prepend to the head
-                if ($cleanHead -match '(?m)^//\s*Load KQL files\s*$') {
-                    $cleanHead = [regex]::Replace($cleanHead, '(?m)^(//\s*Load KQL files\s*$)', "$1`n$kqlVariables")
-                } else {
-                    $cleanHead = $kqlVariables + "`n" + $cleanHead
+                $existingVars = [regex]::Matches($head, '(?m)^\s*var\s+(kql\w+)\s*=\s*loadTextContent\([^)]*\)\s*$')
+                $existingVarSet = @{}
+                foreach ($m in $existingVars) { $existingVarSet[$m.Groups[1].Value] = $true }
+
+                $toInsert = @()
+                foreach ($line in ($kqlVariables -split "`n")) {
+                    if ($line -match '^\s*var\s+(kql\w+)\s*=') {
+                        $vn = $matches[1]
+                        if (-not $existingVarSet.ContainsKey($vn)) { $toInsert += $line }
+                    }
                 }
 
-                return $cleanHead + $tail
+                if ($toInsert.Count -eq 0) { return $head + $tail }
+
+                if ($head -match '(?m)^//\s*Load KQL files\s*$') {
+                    $insertion = ($toInsert -join "`n")
+                    $head = [regex]::Replace($head, '(?m)^(//\s*Load KQL files\s*$)', "$1`n$insertion")
+                    return $head + $tail
+                }
+
+                return (($toInsert -join "`n") + "`n" + $head + $tail)
             }
 
             # First, get all existing rule names (including the one we're adding/updating)
@@ -628,7 +639,7 @@ $groupingBlock$entitiesBlock    customDetails: {
 
             # Try to find existing rule
             $result = Find-RuleBlock -text $content -searchDisplayName $OriginalDisplayName -searchName $rname
-
+ 
             if ($result.Found) {
                 Write-Host "   Replacing existing rule (lines $($result.StartLine)-$($result.EndLine))" -ForegroundColor Yellow
                 $lines = $content -split "`n"
@@ -638,7 +649,7 @@ $groupingBlock$entitiesBlock    customDetails: {
                 return $beforeRule + $ruleObj + $afterRule
             } else {
                 Write-Host "   Adding new rule to array" -ForegroundColor Yellow
-
+ 
                 # Insert new rule object into rules array with proper comma handling
                 $rulesMatch = [regex]::Match($content, 'var\s+rules\s*=\s*\[')
                 if ($rulesMatch.Success) {
@@ -656,6 +667,11 @@ $groupingBlock$entitiesBlock    customDetails: {
                         $inside = $content.Substring($start, $closeIdx - $start)
                         $suffixPart = $content.Substring($closeIdx)
 
+                        # Avoid duplicate insertion if a block with same name already exists
+                        if ($inside -match "(?m)name:\s*'$([regex]::Escape($rname))'") {
+                            return $content
+                        }
+
                         $needsComma = -not [string]::IsNullOrWhiteSpace($inside.Trim())
                         if ($needsComma) {
                             $prefixPart = $prefixPart.TrimEnd("`r", "`n", " ", "`t")
@@ -663,7 +679,7 @@ $groupingBlock$entitiesBlock    customDetails: {
                         } else {
                             $insertion = "`n$ruleObj`n"
                         }
-
+ 
                         return $prefixPart + $insertion + $suffixPart
                     }
                 }
@@ -1166,7 +1182,7 @@ try {
         }
 
         # If entities/grouping look incomplete from list API, fetch full rule details
-        $needDetail = ($entities.Keys.Count -eq 0) -or ([string]::IsNullOrWhiteSpace("" + $rule.groupingEnabled)) -or ([string]::IsNullOrWhiteSpace("" + $rule.groupingMethod))
+        $needDetail = ($entities.Keys.Count -eq 0) -or ([string]::IsNullOrWhiteSpace("" + $rule.groupingEnabled)) -or ([string]::IsNullOrWhiteSpace("" + $rule.groupingMethod)) -or ([string]::IsNullOrWhiteSpace("" + $rule.query))
         if ($needDetail) {
             try {
                 # Fallback to REST for broad compatibility across CLI versions
@@ -1179,6 +1195,7 @@ try {
                     $props = if ($detail.properties) { $detail.properties } else { $detail }
                     
                     # Update missing fields from detailed response
+                    if ($props.query) { $rule.query = $props.query }
                     if ($props.techniques -and $props.techniques.Count -gt 0) {
                         $rule.techniques = $props.techniques
                     }
