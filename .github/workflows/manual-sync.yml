@@ -84,6 +84,7 @@ jobs:
         echo "timestamp=$(date -u +'%Y-%m-%d %H:%M UTC')" >> $GITHUB_OUTPUT
 
     - name: Sync from Sentinel
+      id: sync
       run: |
         echo "🔄 Starting manual sync from ${{ inputs.environment }} environment..."
         
@@ -96,14 +97,29 @@ jobs:
           WS_SECRET="${{ secrets.SENTINEL_WS_PROD }}"
         fi
         
-        # Run sync script
-        pwsh -File scripts/sync-sentinel-changes.ps1 \
+        # Run sync script and capture output
+        echo "Running sync script..."
+        SYNC_OUTPUT=$(pwsh -File scripts/sync-sentinel-changes.ps1 \
           -ResourceGroup "$RG_SECRET" \
           -WorkspaceName "$WS_SECRET" \
           -Environment "${{ inputs.environment }}" \
           -Organization "${{ inputs.organization }}" \
           -ForceSync:${{ inputs.force_sync }} \
-          -RuleName "${{ inputs.rule_name }}"
+          -RuleName "${{ inputs.rule_name }}" 2>&1)
+        
+        echo "$SYNC_OUTPUT"
+        
+        # Check for GitOps alerts (rules missing in prod)
+        if echo "$SYNC_OUTPUT" | grep -q "GitOps Alert:"; then
+          echo "gitops-alert=true" >> $GITHUB_OUTPUT
+          MISSING_RULES=$(echo "$SYNC_OUTPUT" | grep -A 10 "GitOps Alert:" | grep "   -" | sed 's/   - //' | tr '\n' ', ' | sed 's/, $//')
+          echo "missing-rules=$MISSING_RULES" >> $GITHUB_OUTPUT
+          echo "🚨 GitOps Alert: Rules missing in prod detected"
+        else
+          echo "gitops-alert=false" >> $GITHUB_OUTPUT
+          echo "missing-rules=" >> $GITHUB_OUTPUT
+          echo "✅ No GitOps alerts - all rules in sync"
+        fi
 
     - name: Check for changes
       id: check-changes
@@ -117,38 +133,63 @@ jobs:
           echo "✅ No changes detected in sync"
         fi
 
+    - name: Determine PR action needed
+      id: pr-decision
+      run: |
+        # Create PR if there are file changes OR GitOps alerts
+        if [ "${{ steps.check-changes.outputs.changes-detected }}" == "true" ] || [ "${{ steps.sync.outputs.gitops-alert }}" == "true" ]; then
+          echo "create-pr=true" >> $GITHUB_OUTPUT
+          echo "🎯 PR creation needed: Changes=${{ steps.check-changes.outputs.changes-detected }}, GitOps Alert=${{ steps.sync.outputs.gitops-alert }}"
+        else
+          echo "create-pr=false" >> $GITHUB_OUTPUT
+          echo "✅ No PR needed: No changes and no GitOps alerts"
+        fi
+
     - name: Debug outputs
       run: |
         echo "changes-detected = ${{ steps.check-changes.outputs.changes-detected }}"
+        echo "gitops-alert = ${{ steps.sync.outputs.gitops-alert }}"
+        echo "missing-rules = ${{ steps.sync.outputs.missing-rules }}"
+        echo "create-pr = ${{ steps.pr-decision.outputs.create-pr }}"
 
-    - name: Create Pull Request if changes detected
-      if: steps.check-changes.outputs.changes-detected == 'true'
+    - name: Create Pull Request
+      if: steps.pr-decision.outputs.create-pr == 'true'
       uses: peter-evans/create-pull-request@v5
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
         branch: ${{ steps.branch-name.outputs.branch-name }}
         base: main
-        title: "🔄 Manual Sync from ${{ inputs.environment }} - ${{ steps.date.outputs.today }}"
+        title: "${{ steps.sync.outputs.gitops-alert == 'true' && '🚨 GitOps: Deploy to Prod' || '🔄 Manual Sync' }} from ${{ inputs.environment }} - ${{ steps.date.outputs.today }}"
         body: |
-          ## Manual Sync from ${{ inputs.environment }} Environment
+          ## ${{ steps.sync.outputs.gitops-alert == 'true' && 'GitOps Deployment Required' || 'Manual Sync' }} from ${{ inputs.environment }} Environment
           
-          This PR contains changes synced from the ${{ inputs.environment }} Sentinel environment.
+          ${{ steps.sync.outputs.gitops-alert == 'true' && '⚠️ **This PR is required for GitOps deployment!**' || 'This PR contains changes synced from the Sentinel environment.' }}
           
           **Environment:** ${{ inputs.environment }}
           **Branch:** ${{ steps.branch-name.outputs.branch-name }}
           **Rule:** ${{ inputs.rule_name || 'All custom rules' }}
           **Timestamp:** ${{ steps.date.outputs.timestamp }}
           
-          ### Changes
-          - Synced KQL queries
-          - Updated rule configurations
+          ${{ steps.sync.outputs.gitops-alert == 'true' && format('### 🚨 Rules Missing in Production
+          
+          The following rules exist in dev but are missing from production:
+          - {0}
+          
+          **Action Required:** Merging this PR will trigger the deployment workflow to deploy these rules to production.
+          
+          ', steps.sync.outputs.missing-rules) || '' }}### Changes
+          ${{ steps.check-changes.outputs.changes-detected == 'true' && '- Synced KQL queries
+          - Updated rule configurations' || '- No file changes (GitOps deployment only)' }}
           - Custom rules only (vendor rules excluded)
           
-          Please review the changes before merging.
+          ${{ steps.sync.outputs.gitops-alert == 'true' && '⚠️ **Important:** This PR ensures dev/prod environment parity.' || 'Please review the changes before merging.' }}
         commit-message: "🔄 Manual sync from ${{ inputs.environment }} - ${{ steps.date.outputs.timestamp }}"
         delete-branch: true
 
-    - name: No changes notification
-      if: steps.check-changes.outputs.changes-detected == 'false'
+    - name: No action needed notification
+      if: steps.pr-decision.outputs.create-pr == 'false'
       run: |
-        echo "ℹ️ No changes detected in ${{ inputs.environment }} environment - no commit needed"
+        echo "ℹ️ No action needed:"
+        echo "   - File changes: ${{ steps.check-changes.outputs.changes-detected }}"
+        echo "   - GitOps alerts: ${{ steps.sync.outputs.gitops-alert }}"
+        echo "   - All environments are in sync ✅"
