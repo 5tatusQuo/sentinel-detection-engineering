@@ -657,7 +657,13 @@ $groupingBlock$entitiesBlock    customDetails: {
                         $suffixPart = $content.Substring($closeIdx)
 
                         $needsComma = -not [string]::IsNullOrWhiteSpace($inside.Trim())
-                        $insertion = if ($needsComma) { "`n,`n$ruleObj`n" } else { "`n$ruleObj`n" }
+                        if ($needsComma) {
+                            $prefixPart = $prefixPart.TrimEnd("`r", "`n", " ", "`t")
+                            $insertion = ",`n$ruleObj`n"
+                        } else {
+                            $insertion = "`n$ruleObj`n"
+                        }
+
                         return $prefixPart + $insertion + $suffixPart
                     }
                 }
