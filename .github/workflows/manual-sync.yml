@@ -167,15 +167,7 @@ jobs:
           git commit -m "${{ steps.sync.outputs.gitops-alert == 'true' && '🚨 GitOps sync and deployment required' || '🔄 Manual sync' }} from ${{ inputs.environment }} - ${{ steps.date.outputs.timestamp }}"
         elif [ "${{ steps.sync.outputs.gitops-alert }}" == "true" ]; then
           echo "📝 Creating empty commit for GitOps deployment trigger..."
-          git commit --allow-empty -m "🚨 GitOps deployment required: Deploy missing rules to prod
-
-Rules missing in production:
-- ${{ steps.sync.outputs.missing-rules }}
-
-This empty commit triggers the deployment workflow to deploy
-rules from ${{ inputs.environment }} to production environment.
-
-Timestamp: ${{ steps.date.outputs.timestamp }}"
+          git commit --allow-empty -m "🚨 GitOps deployment required: Deploy missing rules to prod - ${{ steps.sync.outputs.missing-rules }} - Timestamp: ${{ steps.date.outputs.timestamp }}"
         else
           echo "📝 No changes and no GitOps alerts - no commit needed"
         fi
