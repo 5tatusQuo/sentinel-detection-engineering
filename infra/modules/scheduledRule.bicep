@@ -34,7 +34,15 @@ var groupingDefaults = {
 }
 var g = union(groupingDefaults, grouping)
 
-// Entities will be passed directly as the raw Azure Sentinel structure
+// Convert entities to proper entityMappings array format
+// Handle different entity mapping formats and ensure we always pass an array
+var entityMappings = empty(entities) ? [] : contains(entities, 'entityType') ? [entities] : contains(entities, 'accountFullName') ? [{
+  entityType: 'Account'
+  fieldMappings: [{
+    identifier: 'FullName'
+    columnName: entities.accountFullName
+  }]
+}] : []
 
 var cd = customDetails // no defaults needed
 
@@ -80,8 +88,8 @@ resource rule 'Microsoft.SecurityInsights/alertRules@2025-06-01' = {
       }
     }
 
-    // Pass entity mappings directly from Azure Sentinel structure
-    entityMappings: entities
+    // Use converted entity mappings array
+    entityMappings: entityMappings
 
     alertDetailsOverride: {
       alertDisplayNameFormat: displayName
