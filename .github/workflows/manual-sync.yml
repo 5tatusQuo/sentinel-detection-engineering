@@ -157,6 +157,10 @@ jobs:
       run: |
         echo "🎯 Creating branch for sync changes and/or GitOps deployment..."
         
+        # Configure Git identity for commits
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        
         # Create and switch to new branch
         git checkout -b ${{ steps.branch-name.outputs.branch-name }}
         
