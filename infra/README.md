@@ -139,15 +139,48 @@ az deployment group what-if \
 
 ## 🔗 Entity Mapping
 
-Tell Sentinel what entities to extract from your alerts:
+The system supports multiple entity mapping formats and automatically converts them for Azure Sentinel:
 
+### Legacy Format (Auto-Converted)
 ```bicep
 entities: {
-  accountFullName: 'SubjectUserName'  // Extract Account entity
-  hostName: 'Computer'                // Extract Host entity  
-  ipAddress: 'IPAddress'              // Extract IP entity
+  accountFullName: 'SubjectUserName'  // Simple column mapping
+  hostName: 'Computer'                // Automatically converted to Azure format
 }
 ```
+
+### Azure Sentinel Format (Recommended)
+```bicep
+entities: {
+  entityType: 'Account'
+  fieldMappings: [{
+    identifier: 'FullName'
+    columnName: 'SubjectUserName'
+  }]
+}
+```
+
+### Multiple Entities (Array Format)
+```bicep
+entities: [
+  {
+    entityType: 'Account'
+    fieldMappings: [{
+      identifier: 'FullName'
+      columnName: 'SubjectUserName'
+    }]
+  },
+  {
+    entityType: 'Host'
+    fieldMappings: [{
+      identifier: 'FullName'
+      columnName: 'Computer'
+    }]
+  }
+]
+```
+
+**Note**: The Bicep module automatically handles format conversion, so any format will work correctly during deployment.
 
 ## 📝 Custom Details
 
@@ -283,6 +316,16 @@ Make sure all your rule objects have the same properties. If you don't need `gro
 
 #### KQL Column Errors
 If you reference columns in `entities` or `customDetails`, make sure those columns are actually returned by your KQL query.
+
+#### Entity Mapping Deployment Errors
+- **Error**: "Cannot deserialize JSON object into List<EntityMapping>"
+- **Fix**: This is automatically handled by the Bicep module now
+- **Cause**: Old entity mapping formats are automatically converted to Azure-compatible arrays
+
+#### JSON Configuration Issues
+- **Error**: Rule configurations not updating during sync
+- **Fix**: The sync script now uses JSON-based configuration for easier updates
+- **Check**: Verify `rules-dev.json` and `rules-prod.json` files exist and are valid
 
 ### Validation & Testing
 

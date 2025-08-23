@@ -72,24 +72,40 @@ A **configuration-driven**, multi-organization system for creating and deploying
 
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Create Rule   │───▶│  Feature Branch │───▶│  Pull Request   │
-│   (Portal)      │    │   (Auto-gen)    │    │   (Auto-created)│
+│   Create Rule   │───▶│  Sync Detects   │───▶│  Feature Branch │
+│   (Portal)      │    │  New/Missing    │    │   (Auto-gen)    │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
                                                        │
                                                        ▼
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Production    │◀───│   Merge to Main │◀───│  Validate in Dev│
-│   Deployment    │    │   (Manual)      │    │   (Auto-deploy) │
+│   Production    │◀───│   Merge to Main │◀───│  Pull Request   │
+│   Deployment    │    │   (Manual)      │    │   (Auto-created)│
 └─────────────────┘    └─────────────────┘    └─────────────────┘
+                               │                       │
+                               ▼                       ▼
+                    ┌─────────────────┐    ┌─────────────────┐
+                    │ GitOps Drift    │    │  Validate in Dev│
+                    │ Detection       │    │   (Auto-deploy) │
+                    └─────────────────┘    └─────────────────┘
 ```
 
 ### Workflow Triggers
 
 - **Manual Sync**: Portal changes → Feature branch → PR
+- **GitOps Drift Detection**: Missing rules in prod → Automatic PR creation
 - **Nightly Sync**: Production changes → Feature branch → PR (custom rules)
 - **Nightly Sync**: Production changes → Main branch (vendor rules)
 - **Deployment**: Feature branches → Dev, Main → Prod
 - **Drift Detection**: Weekly checks → Feature branch with report
+
+### ✨ Key Features
+
+- **🔍 Smart Drift Detection**: Automatically detects when rules exist in dev but are missing from prod
+- **🚀 Intelligent PR Creation**: Creates PRs even when no file changes exist but deployment is needed
+- **🛠️ Entity Mapping Support**: Handles all Azure Sentinel entity mapping formats automatically
+- **📋 JSON-Based Configuration**: Easy-to-edit rule configurations with programmatic updates
+- **🔄 Environment Parity**: Maintains sync between dev and prod configurations
+- **⚡ Scalable Architecture**: Supports unlimited organizations with configuration-driven approach
 
 ### File Structure
 
@@ -105,13 +121,15 @@ A **configuration-driven**, multi-organization system for creating and deploying
 ├── organizations/              # All client organizations
 │   ├── org1/                   # Organization 1 (Client 1)
 │   │   ├── env/
-│   │   │   ├── deploy-dev.bicep    # Dev environment rules
-│   │   │   └── deploy-prod.bicep   # Prod environment rules
+│   │   │   ├── deploy-dev.bicep    # Dev environment deployment template
+│   │   │   ├── deploy-prod.bicep   # Prod environment deployment template
+│   │   │   ├── rules-dev.json      # Dev environment rule configurations
+│   │   │   └── rules-prod.json     # Prod environment rule configurations
 │   │   └── kql/                    # KQL query files
 │   │       ├── dev/                # Dev environment KQL files
-│   │       │   ├── suspicious-login-attempts.kql
-│   │       │   ├── admin-account-anomaly.kql
-│   │       │   └── uc-powershell-encoded.kql
+│   │       │   ├── customrule1.kql
+│   │       │   ├── customrule2.kql
+│   │       │   └── customrule3.kql
 │   │       └── prod/               # Prod environment KQL files
 │   └── org2/                   # Organization 2 (Client 2)
 │       ├── env/
@@ -347,8 +365,19 @@ $enabledOrgs = Get-EnabledOrganizations -Environment "dev"
 
 4. **Sync Issues**
    - Check Azure authentication
-   - Verify workspace names and resource groups
+   - Verify workspace names and resource groups  
    - Review sync workflow logs
+   - Ensure Git identity is configured in workflows
+
+5. **Entity Mapping Errors**
+   - Check `rules-*.json` for proper entity mapping format
+   - Azure expects `entityMappings` as arrays, not objects
+   - Sync script automatically converts formats during sync
+
+6. **GitOps Workflow Issues**
+   - Verify drift detection is working (rules missing from prod)
+   - Check PR creation logic for both file changes and empty commits
+   - Ensure GitHub Actions has proper permissions for branch/PR creation
 
 ### Getting Help
 

@@ -26,14 +26,25 @@ This directory contains PowerShell scripts that help automate Microsoft Sentinel
 **When it runs**: During validation in the deployment workflow
 
 ### `sync-sentinel-changes.ps1`
-**What it does**: Exports current Sentinel alert rules and automatically updates KQL and Bicep files to match the portal configuration.
+**What it does**: Exports current Sentinel alert rules and automatically updates KQL files and JSON configurations to match the portal state. Features intelligent GitOps drift detection.
 
-**Why you need it**: Allows reviewers to make changes in the Sentinel portal (easier GUI) and then sync those changes back to the repository automatically. Also used for nightly production sync and manual sync workflows.
+**Why you need it**: 
+- Allows reviewers to make changes in the Sentinel portal (easier GUI) and sync back to repository
+- Automatically detects when rules exist in dev but are missing from prod (GitOps drift)
+- Supports JSON-based rule configuration for easier programmatic updates
+- Handles all Azure Sentinel entity mapping formats automatically
+
+**Key Features**:
+- **Smart Drift Detection**: Detects rules missing from production environment
+- **New Rule Detection**: Automatically adds rules that exist in Sentinel but not in local configs
+- **Entity Mapping Conversion**: Handles old and new entity mapping formats seamlessly
+- **Environment Parity**: Maintains consistency between dev and prod configurations
 
 **When it runs**: 
 - Manually by reviewers during the review process
 - Automatically every night for production sync
 - Via manual sync workflows for both dev and prod environments
+- Triggered by GitOps workflows when drift is detected
 
 ## 🚀 How to Use These Scripts
 
@@ -85,20 +96,27 @@ pwsh scripts/validate-kql-columns.ps1 \
 
 #### Sync Sentinel Changes
 ```powershell
-# Sync all custom rules from dev environment
-.\scripts\sync-sentinel-changes.ps1 -ResourceGroup "SENTINEL_RG_DEV" -WorkspaceName "SENTINEL_WS_DEV"
+# Sync all custom rules from dev environment for org1
+.\scripts\sync-sentinel-changes.ps1 -ResourceGroup "sentinel-ws-dev" -WorkspaceName "sentinel-rg-dev" -Environment "dev" -Organization "org1"
 
 # Sync specific rule only
-.\scripts\sync-sentinel-changes.ps1 -ResourceGroup "SENTINEL_RG_DEV" -WorkspaceName "SENTINEL_WS_DEV" -RuleName "test5"
+.\scripts\sync-sentinel-changes.ps1 -ResourceGroup "sentinel-ws-dev" -WorkspaceName "sentinel-rg-dev" -Environment "dev" -Organization "org1" -RuleName "CustomRule3"
 
-# Sync from production with vendor rules
-.\scripts\sync-sentinel-changes.ps1 -ResourceGroup "SENTINEL_RG_PROD" -WorkspaceName "SENTINEL_WS_PROD" -Environment "prod" -IncludeVendorRules $true
+# Sync from production (detects drift automatically)
+.\scripts\sync-sentinel-changes.ps1 -ResourceGroup "sentinel-ws-prod" -WorkspaceName "sentinel-rg-prod" -Environment "prod" -Organization "org1"
 
-# Dry run to see what would change
-.\scripts\sync-sentinel-changes.ps1 -ResourceGroup "SENTINEL_RG_DEV" -WorkspaceName "SENTINEL_WS_DEV" -DryRun
+# Dry run to see what would change (no actual updates)
+.\scripts\sync-sentinel-changes.ps1 -ResourceGroup "sentinel-ws-dev" -WorkspaceName "sentinel-rg-dev" -Environment "dev" -Organization "org1" -DryRun
 
 # Force sync even if no changes detected
-.\scripts\sync-sentinel-changes.ps1 -ResourceGroup "SENTINEL_RG_DEV" -WorkspaceName "SENTINEL_WS_DEV" -ForceSync $true
+.\scripts\sync-sentinel-changes.ps1 -ResourceGroup "sentinel-ws-dev" -WorkspaceName "sentinel-rg-dev" -Environment "dev" -Organization "org1" -ForceSync
+```
+
+**New GitOps Output Example**:
+```
+🚨 GitOps Alert: 1 rules need deployment to prod
+   - CustomRule3
+💡 Create a PR to deploy these rules to production
 ```
 
 ## 🔐 Authentication
