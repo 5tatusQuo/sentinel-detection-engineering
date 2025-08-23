@@ -611,11 +611,23 @@ Write-Host "🔄 Will update both dev & prod configs for deployment pipeline..."
             entities = Get-EntityMappings -mappings $rule.entityMappings
         }
         
-        # Check if metadata changed (simplified comparison)
-        $metadataChanged = $kqlChanged -or $ForceSync
+        # Check if rule exists in local configs
+        $paths = Get-OrganizationPaths -OrganizationName $Organization -Environment "dev"
+        $rulesJsonPath = "$($paths.EnvDirectory)/rules-dev.json"
+        $localRules = @()
+        if (Test-Path $rulesJsonPath) {
+            $localRules = Get-Content -Path $rulesJsonPath -Raw | ConvertFrom-Json
+        }
+        $ruleExistsLocally = $localRules | Where-Object { $_.name -eq $cleanRuleName }
         
-        # Update Bicep only if metadata changed or force
-        if ($metadataChanged -or $ForceSync) {
+        # Check if metadata changed (simplified comparison)
+        $metadataChanged = $kqlChanged -or $ForceSync -or (-not $ruleExistsLocally)
+        
+        # Update Bicep if metadata changed, force sync, or rule is new
+        if ($metadataChanged) {
+            if (-not $ruleExistsLocally) {
+                Write-Host "   ➕ New rule detected - adding to local configs" -ForegroundColor Green
+            }
             Update-BicepConfig -RuleName $cleanRuleName -PortalCanon $portalCanon -OriginalDisplayName $rule.displayName
         } else {
             Write-Host "   ✅ Metadata unchanged - skipping Bicep update" -ForegroundColor Green
