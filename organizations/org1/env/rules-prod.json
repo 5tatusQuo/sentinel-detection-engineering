@@ -42,5 +42,33 @@
       "accountFullName": "Caller"
     },
     "customDetails": {}
+  },
+  {
+    "name": "customrule3",
+    "period": "PT5M",
+    "tactics": [
+      "InitialAccess"
+    ],
+    "frequency": "PT5M",
+    "grouping": {
+      "matchingMethod": "AllEntities",
+      "enabled": null
+    },
+    "techniques": [],
+    "severity": "Medium",
+    "displayName": "CustomRule3",
+    "kqlFile": "customrule3.kql",
+    "customDetails": {},
+    "createIncident": true,
+    "enabled": true,
+    "entities": {
+      "entityType": "Account",
+      "fieldMappings": [
+        {
+          "columnName": "Caller",
+          "identifier": "AadUserId"
+        }
+      ]
+    }
   }
 ]
