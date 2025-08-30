@@ -2,78 +2,30 @@
 
 A **configuration-driven**, multi-organization system for creating and deploying Microsoft Sentinel detection rules using Infrastructure as Code (Bicep) and GitOps practices.
 
-## 🎯 Quick Start
+## 🚀 Quick Start
 
-### 🚀 Create a New Detection Rule
-
-**Portal-First Approach (Recommended)**
+### Create a New Detection Rule
 
 1. **Create in Azure Sentinel Portal** - Use the GUI to create and test your rule
-   - This is the safest and most reliable method
-   - Avoids configuration errors and syntax issues
-   - Provides immediate testing and validation
-
 2. **Run Drift Detection & Sync** - Go to Actions → **Drift Detection & Sync** → **Run workflow**
-
 3. **Fill in the form**:
    - Environment: `dev` (for testing)
    - Organization: Select your organization (e.g., `org1`, `org2`)
    - Rule name: Leave empty to sync all rules, or specify a specific rule
-   - Force sync: `false` (default)
+4. **Submit** - This will create a feature branch and pull request with your changes
 
-4. **Submit** - This will:
-   - Create a feature branch automatically
-   - Export your rule from Sentinel portal
-   - Generate KQL and Bicep files
-   - Create a pull request for review
-
-### 🔍 Review and Validate
+### Review and Deploy
 
 1. **Review the PR** - Check the KQL logic and configuration
 2. **Test in dev** - The rule is automatically deployed to dev environment
-3. **Validate alerts** - Check that the rule generates appropriate alerts
-4. **Approve and merge** - Once validated, merge the PR
-
-### 🚀 Production Deployment
-
-- **Automatic** - When the PR is merged to main, the rule automatically deploys to production
-- **Safe** - Production deployment requires approval through GitHub environments
+3. **Approve and merge** - Once validated, merge the PR to deploy to production
 
 ## 🏗️ Architecture
 
-### Configuration-Driven Multi-Organization Architecture
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    Configuration Layer                      │
-│  config/organizations.json - Centralized org management    │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                 Organization Structure                      │
-│  organizations/org1/  organizations/org2/  organizations/org3/ │
-│  ├── env/           ├── env/           ├── env/           │
-│  ├── kql/dev/       ├── kql/dev/       ├── kql/dev/       │
-│  └── kql/prod/      └── kql/prod/      └── kql/prod/      │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                  Automated Workflows                        │
-│  • Manual Sync (Portal → Repo)                             │
-│  • Nightly Sync (Prod → Repo)                              │
-│  • Drift Detection (Weekly)                                │
-│  • Vendor Rule Export (Daily)                              │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### GitOps Workflow
-
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Create Rule   │───▶│  Sync Detects   │───▶│  Feature Branch │
-│   (Portal)      │    │  New/Missing    │    │   (Auto-gen)    │
+│   Create Rule   │───▶│ Drift Detection │───▶│  Feature Branch │
+│   (Portal)      │    │ & Sync Workflow │    │   (Auto-gen)    │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
                                                        │
                                                        ▼
@@ -89,297 +41,73 @@ A **configuration-driven**, multi-organization system for creating and deploying
                     └─────────────────┘    └─────────────────┘
 ```
 
-### Workflow Triggers
+## 🔄 Automated Workflows
 
-- **Drift Detection & Sync**: Portal changes → Feature branch → PR (Manual or Nightly)
-- **GitOps Drift Detection**: Missing rules in prod → Automatic PR creation
-- **Deployment**: Feature branches → Dev, Main → Prod
-- **Vendor Sync**: Export vendor rules → Feature branch → PR
-
-### ✨ Key Features
-
-- **🔍 Smart Drift Detection**: Automatically detects when rules exist in dev but are missing from prod
-- **🚀 Intelligent PR Creation**: Creates PRs even when no file changes exist but deployment is needed
-- **🛠️ Entity Mapping Support**: Handles all Azure Sentinel entity mapping formats automatically
-- **📋 JSON-Based Configuration**: Easy-to-edit rule configurations with programmatic updates
-- **🔄 Environment Parity**: Maintains sync between dev and prod configurations
-- **⚡ Scalable Architecture**: Supports unlimited organizations with configuration-driven approach
-
-### File Structure
-
-```
-├── .github/workflows/
-│   ├── deploy.yml              # Main deployment workflow
-│   ├── drift-check.yml         # Unified drift detection & sync workflow
-│   └── vendor-sync.yml         # Vendor rule export workflow
-├── config/
-│   └── organizations.json      # Centralized organization configuration
-├── organizations/              # All client organizations
-│   ├── org1/                   # Organization 1 (Client 1)
-│   │   ├── env/
-│   │   │   ├── deploy-dev.bicep    # Dev environment deployment template
-│   │   │   ├── deploy-prod.bicep   # Prod environment deployment template
-│   │   │   ├── rules-dev.json      # Dev environment rule configurations
-│   │   │   └── rules-prod.json     # Prod environment rule configurations
-│   │   └── kql/                    # KQL query files
-│   │       ├── dev/                # Dev environment KQL files
-│   │       │   ├── customrule1.kql
-│   │       │   ├── customrule2.kql
-│   │       │   └── customrule3.kql
-│   │       └── prod/               # Prod environment KQL files
-│   └── org2/                   # Organization 2 (Client 2)
-│       ├── env/
-│       │   ├── deploy-dev.bicep    # Dev environment rules
-│       │   └── deploy-prod.bicep   # Prod environment rules
-│       └── kql/                    # KQL query files
-│           ├── dev/                # Dev environment KQL files
-│           └── prod/               # Prod environment KQL files
-├── infra/
-│   ├── sentinel-rules.bicep    # Root orchestrator
-│   └── modules/
-│       └── scheduledRule.bicep # Reusable rule module
-├── scripts/
-│   ├── ConfigManager.ps1       # Configuration management module
-│   ├── sync-sentinel-changes.ps1 # Portal-to-repo sync script
-│   ├── deploy-organizations.ps1 # Deploy to all organizations
-│   ├── validate-bicep.ps1      # Bicep validation
-│   └── export_enabled_rules.ps1 # Export vendor rules
-└── docs/
-    ├── configuration-system.md  # Configuration system guide
-    ├── review-process.md        # Review process documentation
-    ├── creating-your-first-rule.md # Rule creation guide
-    ├── approvals.md             # Approval process guide
-    ├── naming-and-metadata.md   # Naming conventions
-    └── pipeline-summary.md      # Pipeline overview
-```
+| Workflow | Purpose | Trigger | Output |
+|----------|---------|---------|---------|
+| **Drift Detection & Sync** | Sync portal changes to Git | Manual + Nightly (3 AM) | Feature branch + PR |
+| **Deploy** | Deploy rules to environments | Push to main/branches | Dev/Prod deployment |
+| **Vendor Sync** | Export vendor rules | Daily (2 AM) | Vendor rule inventory |
 
 ## 🏢 Multi-Organization Support
 
-This repository supports multiple organizations/clients in a **scalable, configuration-driven way**:
+This repository supports multiple organizations with centralized configuration:
 
-### Configuration-Driven Architecture
-- **Centralized Configuration**: All organization settings are defined in `config/organizations.json`
-- **Scalable Structure**: Organizations are stored in `organizations/` directory
-- **Environment Management**: Each organization can have different dev/prod configurations
-- **Flexible Deployment**: Organizations can be enabled/disabled per environment
-
-### Organization Configuration
-The `config/organizations.json` file defines all organization settings:
-
-```json
-{
-  "organizations": [
-    {
-      "name": "org1",
-      "displayName": "Organization 1",
-      "description": "First client organization",
-      "environments": {
-        "dev": {
-          "resourceGroup": "sentinel-rg-dev",
-          "workspaceName": "sentinel-ws-dev",
-          "enabled": true
-        },
-        "prod": {
-          "resourceGroup": "sentinel-rg-prod",
-          "workspaceName": "sentinel-ws-prod", 
-          "enabled": true
-        }
-      },
-      "settings": {
-        "syncVendorRules": true,
-        "syncCustomRules": true,
-        "createFeatureBranches": true
-      }
-    }
-  ],
-  "globalSettings": {
-    "defaultEnvironment": "dev",
-    "syncSchedule": "0 2 * * *",
-    "maxConcurrentDeployments": 3,
-    "enableDryRun": false
-  }
-}
+### File Structure
+```
+├── config/organizations.json      # Centralized org configuration
+├── organizations/                 # Multi-organization support
+│   ├── org1/                     # Organization 1
+│   │   ├── env/                  # Environment configs
+│   │   └── kql/                  # KQL queries (dev/prod)
+│   └── org2/                     # Organization 2
+├── .github/workflows/            # 3 streamlined workflows
+├── scripts/                      # 5 PowerShell automation scripts
+└── docs/                         # Detailed documentation
 ```
 
 ### Adding a New Organization
-1. **Add to Configuration**: Add the organization to `config/organizations.json`
-2. **Create Directory Structure**: 
-   ```bash
-   mkdir -p organizations/org3/{env,kql/{dev,prod}}
-   ```
-3. **Create Bicep Files**: Add `deploy-dev.bicep` and `deploy-prod.bicep` in `organizations/org3/env/`
-4. **Add KQL Files**: Place KQL files in `organizations/org3/kql/dev/` and `organizations/org3/kql/prod/`
-5. **Test Configuration**: Run `pwsh -File scripts/validate-bicep.ps1` to validate
+1. Add to `config/organizations.json`
+2. Create directory structure: `organizations/orgX/{env,kql/{dev,prod}}`
+3. Add Bicep files and KQL queries
+4. Run `pwsh -File scripts/validate-bicep.ps1` to validate
 
-### Configuration Management Scripts
-- **`scripts/ConfigManager.ps1`**: PowerShell module for configuration management
-- **`scripts/validate-bicep.ps1`**: Validates Bicep templates and configuration structure
+## 📚 Documentation
 
-## 🔄 Automated Workflows
+For detailed information, see the docs folder:
 
-### 1. Drift Detection & Sync Workflow (`drift-check.yml`)
-**Purpose**: Unified workflow for drift detection and sync from Azure Sentinel portal
-- **Trigger**: 
-  - **Scheduled**: Nightly at 3 AM UTC (prod, org1 defaults)
-  - **Manual**: Via GitHub Actions with full customization
-- **Inputs**: Environment (dev/prod), Organization, Rule name (optional), Branch name, Force sync
-- **Process**: Detects drift and syncs current rules back to repository
-- **Use Case**: 
-  - Automated nightly sync to catch portal changes
-  - Manual sync when reviewers make changes in portal
-- **Output**: Creates feature branch and pull request with actual file changes
+- **[Configuration System](docs/configuration-system.md)** - Multi-organization setup
+- **[Creating Your First Rule](docs/creating-your-first-rule.md)** - Step-by-step guide
+- **[Review Process](docs/review-process.md)** - PR review workflow
+- **[Pipeline Summary](docs/pipeline-summary.md)** - Workflow details
+- **[Troubleshooting](docs/troubleshooting.md)** - Common issues and solutions
 
-### 2. Vendor Rule Export Workflow (`vendor-sync.yml`)
-**Purpose**: Track vendor rules (Microsoft and partners) across organizations
-- **Schedule**: Daily at 2 AM UTC
-- **Process**: Exports enabled vendor rules for visibility
-- **Output**: Creates pull request with vendor rule updates
-- **Benefits**: Maintains inventory of vendor rules
+## 🛠️ Scripts Reference
 
-### 3. Deployment Workflow (`deploy.yml`)
-**Purpose**: Deploy detection rules to environments
-- **Trigger**: Push to main (prod) or feature branches (dev), pull requests
-- **Process**: Validates and deploys Bicep templates
-- **Environments**: 
-  - Feature branches → Dev only
-  - Main branch → Prod only (with approval)
-- **Multi-org**: Deploys to all enabled organizations
+| Script | Purpose |
+|--------|---------|
+| `ConfigManager.ps1` | Configuration management |
+| `deploy-organizations.ps1` | Deploy to all organizations |
+| `export_enabled_rules.ps1` | Export vendor rules |
+| `sync-sentinel-changes.ps1` | Drift detection & sync |
+| `validate-bicep.ps1` | Bicep validation |
 
-## 🔧 How It Works
+## 🚨 Quick Troubleshooting
 
-### 1. Rule Creation
-- **Azure Sentinel Portal** - Create rules directly in the portal (easier GUI, safer)
-- **Drift Detection & Sync Workflow** - Run unified workflow to pull changes to repository
-- **Branch Creation** - Creates a feature branch with all changes
-- **Pull Request** - Automatically creates a PR for review
-
-### 2. Development Testing
-- **Auto-deploy to Dev** - Rule deploys to dev environment immediately
-- **Validation** - Engineer tests the rule in Sentinel dev environment
-- **Review Process** - Team reviews KQL logic and configuration
-
-### 3. Production Deployment
-- **Manual Approval** - Engineer approves and merges the PR
-- **Auto-deploy to Prod** - Rule automatically deploys to production
-- **Environment Protection** - Production deployment requires approval
-
-## 🛠️ Advanced Usage
-
-### Manual Rule Creation
-
-**⚠️ Not Recommended** - Use the portal-first approach instead to avoid configuration errors.
-
-If you must create rules manually (advanced users only):
-
-```bash
-# Create KQL file in the appropriate organization/environment directory
-echo "your KQL query" > organizations/org1/kql/dev/my-rule.kql
-
-# Create Bicep configuration in the environment directory
-# Create pull request manually
-# Deploy to dev for testing
-```
-
-### Sync from Portal
-
-```bash
-# Run drift detection & sync workflow from GitHub Actions
-# Go to Actions → Drift Detection & Sync
-# Fill in the form:
-# - Environment: dev (for testing)
-# - Organization: org1 (or your org)
-# - Rule name: (leave empty for all rules)
-# - Force sync: false
-```
-
-### Configuration Management
-
-```powershell
-# Import the configuration module
-. .\scripts\ConfigManager.ps1
-
-# Get all organizations
-$orgs = Get-Organizations
-
-# Get specific organization
-$org1 = Get-OrganizationByName -Name "org1"
-
-# Get enabled organizations for dev environment
-$enabledOrgs = Get-EnabledOrganizations -Environment "dev"
-```
-
-## 🔍 Validation and Testing
-
-### KQL Validation
-- **Syntax Check** - Bicep validates KQL syntax during build
-- **Column Analysis** - Scripts detect entity mappings and custom details
-- **Query Testing** - Test queries in Azure Sentinel Logs
-
-### Configuration Validation
-- **Structure Check** - Validates organization configuration
-- **File Structure** - Ensures required directories and files exist
-- **Environment Settings** - Validates environment configurations
-
-### Deployment Validation
-- **Bicep Build** - Templates are validated before deployment
-- **What-if Analysis** - Preview changes before applying
-- **Azure Validation** - ARM template validation against Azure
-
-## 🚨 Troubleshooting
-
-### Common Issues
-
-1. **Configuration Errors**
-   - Run `pwsh -File scripts/validate-bicep.ps1` to validate
-   - Check JSON syntax in `config/organizations.json`
-   - Verify organization directory structure
-
-2. **KQL Syntax Errors**
-   - Check the query in Azure Sentinel Logs
-   - Validate regex patterns and functions
-
-3. **Deployment Failures**
-   - Check Bicep build output
-   - Verify Azure permissions
-   - Review what-if analysis
-
-4. **Sync Issues**
-   - Check Azure authentication
-   - Verify workspace names and resource groups  
-   - Review sync workflow logs
-   - Ensure Git identity is configured in workflows
-
-5. **Entity Mapping Errors**
-   - Check `rules-*.json` for proper entity mapping format
-   - Azure expects `entityMappings` as arrays, not objects
-   - Sync script automatically converts formats during sync
-
-6. **GitOps Workflow Issues**
-   - Verify drift detection is working (rules missing from prod)
-   - Check PR creation logic for both file changes and empty commits
-   - Ensure GitHub Actions has proper permissions for branch/PR creation
-
-### Getting Help
-
-- **Documentation** - Check the `docs/` folder for detailed guides
-- **Scripts** - Use validation scripts in `scripts/` folder
-- **GitHub Issues** - Report problems in the repository
-
-## 📚 Learning Resources
-
-- [Microsoft Sentinel Documentation](https://docs.microsoft.com/en-us/azure/sentinel/)
-- [KQL Quick Reference](https://docs.microsoft.com/en-us/azure/data-explorer/kql-quick-reference)
-- [Bicep Documentation](https://docs.microsoft.com/en-us/azure/azure-resource-manager/bicep/)
-- [MITRE ATT&CK Framework](https://attack.mitre.org/)
+- **Configuration errors**: Run `pwsh -File scripts/validate-bicep.ps1`
+- **KQL syntax errors**: Test queries in Azure Sentinel Logs
+- **Deployment failures**: Check Bicep build output and Azure permissions
+- **Sync issues**: Verify Azure authentication and workspace configuration
 
 ## 🤝 Contributing
 
-1. **Create a feature branch** for your changes
-2. **Follow the GitOps workflow** - create PR, test in dev, merge to main
-3. **Update documentation** for any new features
-4. **Test thoroughly** before merging
+1. Create rules in Azure Sentinel Portal
+2. Use Drift Detection & Sync workflow to pull changes
+3. Review and test in dev environment
+4. Merge PR to deploy to production
 
 ---
 
-**🎯 Goal**: Make detection engineering accessible to beginners while maintaining enterprise-grade security practices through automation, GitOps, and configuration-driven multi-organization management.
+**🎯 Goal**: Make detection engineering accessible through automation, GitOps, and configuration-driven multi-organization management.
 
+For detailed guides and advanced usage, see the [docs](docs/) folder.
