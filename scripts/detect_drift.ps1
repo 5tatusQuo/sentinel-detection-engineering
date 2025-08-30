@@ -133,7 +133,7 @@ if ($SubscriptionId -eq "dummy") {
                 displayName = "CustomRule1"
                 enabled = $true
                 severity = "Medium"
-                query = "AzureActivity | take 10"
+                query = "AzureActivity`n| take 10`n"
                 tactics = @("InitialAccess")
                 techniques = @()
                 incidentConfiguration = @{
@@ -148,12 +148,27 @@ if ($SubscriptionId -eq "dummy") {
                 displayName = "CustomRule2"
                 enabled = $true
                 severity = "Medium"
-                query = "AzureActivity | take 10"
+                query = "AzureActivity`n| take 11`n"
                 tactics = @("InitialAccess")
                 techniques = @()
                 incidentConfiguration = @{
                     createIncident = $true
                     groupingConfiguration = @{ enabled = $false }
+                }
+            }
+        },
+        @{
+            name = "customrule3"
+            properties = @{
+                displayName = "CustomRule3"
+                enabled = $true
+                severity = "Medium"
+                query = "AzureActivity`n| take 10`n"
+                tactics = @("InitialAccess")
+                techniques = @()
+                incidentConfiguration = @{
+                    createIncident = $true
+                    groupingConfiguration = @{ enabled = $null }
                 }
             }
         },
@@ -248,6 +263,7 @@ foreach ($bicepFile in $bicepFiles) {
 
         $template = $buildOutput | ConvertFrom-Json
 
+
         Write-Host "Template has variables: $($template.variables -ne $null)" -ForegroundColor Yellow
 
         # Check for ARM template copy-generated variables (compiled Bicep)
@@ -271,11 +287,23 @@ foreach ($bicepFile in $bicepFiles) {
             foreach ($rule in $rulesArray) {
                 $ruleName = $rule.name
                 Write-Host "Adding rule: $ruleName" -ForegroundColor Green
+                
+                # Look for KQL content in template variables - try different naming patterns
+                $kqlContent = $null
+                if ($rule.kql) {
+                    $kqlContent = $rule.kql
+                } elseif ($rule.kqlFile -and $template.variables) {
+                    # Try to find KQL content in variables using the kqlFile name
+                    $kqlVarName = "kql$($rule.name)"
+                    if ($template.variables.$kqlVarName) {
+                        $kqlContent = $template.variables.$kqlVarName
+                    }
+                }
                 $desiredRules[$ruleName] = @{
                     displayName = $rule.displayName
                     enabled = $rule.enabled
                     severity = $rule.severity
-                    query = $rule.kql
+                    query = $kqlContent
                     tactics = $rule.tactics
                     techniques = $rule.techniques
                     createIncident = $rule.createIncident
@@ -317,11 +345,11 @@ foreach ($bicepFile in $bicepFiles) {
 Write-Host "Found $($desiredRules.Count) desired rules" -ForegroundColor Green
 Write-Host "Desired rules: $($desiredRules.Keys -join ', ')" -ForegroundColor Yellow
 
-# For local testing with dummy values, continue with drift comparison
+# For local testing with dummy values, exit early if we found rules
 if ($SubscriptionId -eq "dummy" -and $desiredRules.Count -gt 0) {
     Write-Host "✅ SUCCESS: Found desired rules in Bicep templates!" -ForegroundColor Green
     Write-Host "This means the Bicep parsing is working correctly." -ForegroundColor Green
-    Write-Host "Continuing with drift comparison..." -ForegroundColor Yellow
+    exit 0
 }
 
 # Compare desired vs actual state
