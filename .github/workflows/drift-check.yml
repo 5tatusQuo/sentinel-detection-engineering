@@ -6,14 +6,24 @@ on:
     - cron: '0 3 * * 0'
   workflow_dispatch:
     inputs:
-      workspace:
-        description: 'Workspace to check for drift'
+      environment:
+        description: 'Environment to check for drift'
         required: true
-        default: 'prod'
         type: choice
         options:
           - dev
           - prod
+        default: 'prod'
+      organization:
+        description: 'Organization to check (e.g., org1, org2, client-name)'
+        required: true
+        type: string
+        default: ''
+      force_check:
+        description: 'Force drift check even if no changes expected'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   id-token: write
@@ -21,133 +31,210 @@ permissions:
   pull-requests: write
 
 env:
+  AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
   AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
   AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-  AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
 
 jobs:
   detect-drift:
     runs-on: ubuntu-latest
-    
+
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
       with:
-        fetch-depth: 0  # Full history for branch comparison
-    
+        token: ${{ secrets.GITHUB_TOKEN }}
+        fetch-depth: 0
+
     - name: Setup PowerShell
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: '8.0.x'
-    
-    - name: Install Azure CLI
-      run: |
-        curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
-        az --version
-    
-    - name: Install Bicep CLI
-      run: |
-        az bicep install
-        az bicep version
-    
+        dotnet-version: '7.0.x'
+
     - name: Login to Azure
       uses: azure/login@v2
       with:
         client-id: ${{ secrets.AZURE_CLIENT_ID }}
         tenant-id: ${{ secrets.AZURE_TENANT_ID }}
         subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-    
-    - name: Detect drift in Dev workspace
-      if: github.event.inputs.workspace == 'dev' || github.event_name == 'schedule'
-      env:
-        SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-        RESOURCE_GROUP: ${{ secrets.SENTINEL_RG_DEV }}
-        WORKSPACE: ${{ secrets.SENTINEL_WS_DEV }}
-        API_VERSION: '2025-06-01'
+
+    - name: Generate branch name
+      id: branch-name
       run: |
-        pwsh -File scripts/detect_drift.ps1
-      continue-on-error: true
-    
-    - name: Detect drift in Prod workspace
-      if: github.event.inputs.workspace == 'prod' || github.event_name == 'schedule'
-      env:
-        SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-        RESOURCE_GROUP: ${{ secrets.SENTINEL_RG_PROD }}
-        WORKSPACE: ${{ secrets.SENTINEL_WS_PROD }}
-        API_VERSION: '2025-06-01'
+        TIMESTAMP=$(date -u +'%Y%m%d-%H%M%S')
+        BRANCH_NAME="drift/${{ inputs.environment }}-$TIMESTAMP"
+        echo "branch-name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+        echo "📝 Using branch: $BRANCH_NAME"
+
+    - name: Set current date
+      id: date
       run: |
-        pwsh -File scripts/detect_drift.ps1
-    
-    - name: Check for drift report
-      id: check-drift
+        echo "today=$(date -u +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+        echo "timestamp=$(date -u +'%Y-%m-%d %H:%M UTC')" >> $GITHUB_OUTPUT
+
+    - name: Detect drift
+      id: detect-drift
       run: |
-        if [ -f "drift-report.md" ]; then
-          echo "drift_found=true" >> $GITHUB_OUTPUT
-          echo "Drift report found"
+        echo "🔍 Starting drift detection in ${{ inputs.environment }} environment..."
+
+        # Set environment-specific secrets
+        if [ "${{ inputs.environment }}" == "dev" ]; then
+          RG_SECRET="${{ secrets.SENTINEL_RG_DEV }}"
+          WS_SECRET="${{ secrets.SENTINEL_WS_DEV }}"
         else
-          echo "drift_found=false" >> $GITHUB_OUTPUT
-          echo "No drift report found"
+          RG_SECRET="${{ secrets.SENTINEL_RG_PROD }}"
+          WS_SECRET="${{ secrets.SENTINEL_WS_PROD }}"
         fi
-    
-    - name: Create branch and commit drift report
-      if: steps.check-drift.outputs.drift_found == 'true'
+
+        # Run drift detection script
+        echo "Running drift detection script..."
+        DRIFT_OUTPUT=$(pwsh -File scripts/detect_drift.ps1 \
+          -SubscriptionId "$AZURE_SUBSCRIPTION_ID" \
+          -ResourceGroup "$RG_SECRET" \
+          -Workspace "$WS_SECRET" \
+          -Organization "${{ inputs.organization }}" 2>&1)
+
+        echo "$DRIFT_OUTPUT"
+
+        # Check exit code to determine if drift was found
+        if [ $? -eq 0 ]; then
+          echo "drift_found=false" >> $GITHUB_OUTPUT
+          echo "✅ No drift detected"
+        else
+          echo "drift_found=true" >> $GITHUB_OUTPUT
+          echo "❌ Drift detected"
+        fi
+
+    - name: Check for changes
+      id: check-changes
       run: |
-        # Create branch name with date
-        BRANCH_NAME="fix/drift-detection-$(date +%Y-%m-%d)"
+        if [ -n "$(git status --porcelain)" ]; then
+          echo "changes-detected=true" >> $GITHUB_OUTPUT
+          echo "📝 Changes detected in workspace"
+          git status --porcelain
+        else
+          echo "changes-detected=false" >> $GITHUB_OUTPUT
+          echo "✅ No changes detected in workspace"
+        fi
+
+    - name: Determine PR action needed
+      id: pr-decision
+      run: |
+        # Create PR if drift is found OR there are file changes
+        if [ "${{ steps.detect-drift.outputs.drift_found }}" == "true" ] || [ "${{ steps.check-changes.outputs.changes-detected }}" == "true" ]; then
+          echo "create-pr=true" >> $GITHUB_OUTPUT
+          echo "🎯 PR creation needed: Drift=${{ steps.detect-drift.outputs.drift_found }}, Changes=${{ steps.check-changes.outputs.changes-detected }}"
+        else
+          echo "create-pr=false" >> $GITHUB_OUTPUT
+          echo "✅ No PR needed: No drift and no changes"
+        fi
+
+    - name: Debug outputs
+      run: |
+        echo "drift_found = ${{ steps.detect-drift.outputs.drift_found }}"
+        echo "changes-detected = ${{ steps.check-changes.outputs.changes-detected }}"
+        echo "create-pr = ${{ steps.pr-decision.outputs.create-pr }}"
+
+    - name: Create branch and commit changes
+      if: steps.pr-decision.outputs.create-pr == 'true'
+      run: |
+        echo "🎯 Creating branch for drift detection results..."
+
+        # Configure Git identity for commits
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
-        git checkout -b "$BRANCH_NAME"
-        git add drift-report.md
-        git commit -m "fix: drift detection report $(date +%Y-%m-%d)"
-        echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
-    
-    - name: Push branch
-      if: steps.check-drift.outputs.drift_found == 'true'
-      uses: ad-m/github-push-action@master
-      with:
-        github_token: ${{ secrets.GITHUB_TOKEN }}
-        branch: ${{ steps.create-branch.outputs.branch_name }}
-    
+
+        # Create and switch to new branch
+        git checkout -b ${{ steps.branch-name.outputs.branch-name }}
+
+        # If there are file changes, commit them
+        if [ "${{ steps.check-changes.outputs.changes-detected }}" == "true" ]; then
+          echo "📝 Committing drift detection results..."
+          git add .
+          git commit -m "🔍 Drift detected from ${{ inputs.environment }} - ${{ steps.date.outputs.timestamp }}"
+        else
+          echo "📝 Creating empty commit for drift alert..."
+          git commit --allow-empty -m "🔍 Drift alert: Configuration drift detected in ${{ inputs.environment }} - ${{ steps.date.outputs.timestamp }}"
+        fi
+
+        # Push the branch
+        git push origin ${{ steps.branch-name.outputs.branch-name }}
+        echo "✅ Created and pushed branch: ${{ steps.branch-name.outputs.branch-name }}"
+
     - name: Create Pull Request
-      if: steps.check-drift.outputs.drift_found == 'true'
-      uses: peter-evans/create-pull-request@v5
+      if: steps.pr-decision.outputs.create-pr == 'true'
+      uses: actions/github-script@v7
       with:
-        token: ${{ secrets.GITHUB_TOKEN }}
-        base: main
-        branch: ${{ steps.create-branch.outputs.branch_name }}
-        title: "fix: drift detection report $(date +%Y-%m-%d)"
-        body: |
-          ## Drift Detection Alert
-          
-          ⚠️ **Configuration drift detected** between desired state (Bicep templates) and actual state (Sentinel workspace).
-          
-          **Generated:** $(date -u +%Y-%m-%d\ %H:%M:%S\ UTC)  
-          **Workspace:** ${{ github.event.inputs.workspace || 'prod' }}
-          
-          ### What is drift?
-          Drift occurs when the actual configuration in Microsoft Sentinel differs from what's defined in our Bicep templates. This can happen when:
-          - Rules are modified directly in the Azure portal
-          - Manual changes bypass the GitOps workflow
-          - Vendor rules are updated outside our control
-          
-          ### Next Steps
-          1. **Review the drift report** attached to this PR
-          2. **Investigate the differences** and determine if they're intentional
-          3. **Update Bicep templates** if the changes should be permanent
-          4. **Redeploy** to sync the workspace with desired state
-          
-          ### Prevention
-          - Always make changes through this repository
-          - Avoid direct portal modifications
-          - Use the automated deployment pipeline
-          
-          **Note:** This is an automated drift detection. Please review and take appropriate action.
-        labels: |
-          drift-detection
-          needs-attention
-        delete-branch: false
-    
-    - name: Comment on successful check
-      if: steps.check-drift.outputs.drift_found == 'false'
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          const hasDrift = '${{ steps.detect-drift.outputs.drift_found }}' === 'true';
+          const hasChanges = '${{ steps.check-changes.outputs.changes-detected }}' === 'true';
+          const environment = '${{ inputs.environment }}';
+          const organization = '${{ inputs.organization }}';
+          const branchName = '${{ steps.branch-name.outputs.branch-name }}';
+          const timestamp = '${{ steps.date.outputs.timestamp }}';
+          const today = '${{ steps.date.outputs.today }}';
+
+          let title, body;
+
+          if (hasDrift) {
+            title = '🔍 Drift Detected from ' + environment + ' - ' + today;
+            body = '## Configuration Drift Detected\n\n' +
+                   '⚠️ **Configuration drift detected** between desired state (Bicep templates) and actual state (Sentinel workspace).\n\n' +
+                   '**Environment:** ' + environment + '\n' +
+                   '**Organization:** ' + organization + '\n' +
+                   '**Branch:** ' + branchName + '\n' +
+                   '**Timestamp:** ' + timestamp + '\n\n' +
+                   '### What is drift?\n' +
+                   'Drift occurs when the actual configuration in Microsoft Sentinel differs from what\'s defined in our Bicep templates. This can happen when:\n' +
+                   '- Rules are modified directly in the Azure portal\n' +
+                   '- Manual changes bypass the GitOps workflow\n' +
+                   '- Vendor rules are updated outside our control\n\n' +
+                   '### Next Steps\n' +
+                   '1. **Review the drift report** (if attached)\n' +
+                   '2. **Investigate the differences** and determine if they\'re intentional\n' +
+                   '3. **Update Bicep templates** if the changes should be permanent\n' +
+                   '4. **Redeploy** to sync the workspace with desired state\n\n' +
+                   '### Changes\n' +
+                   (hasChanges ? '- Drift report and configuration files updated\n' : '- Drift alert (no file changes)\n') +
+                   '- Environment: ' + environment + '\n' +
+                   '- Organization: ' + organization + '\n\n' +
+                   '⚠️ **Important:** This PR ensures dev/prod environment parity.';
+          } else {
+            title = '🔍 Drift Check Results from ' + environment + ' - ' + today;
+            body = '## Drift Detection Results\n\n' +
+                   'This PR contains drift detection results from the ' + environment + ' Sentinel environment.\n\n' +
+                   '**Environment:** ' + environment + '\n' +
+                   '**Organization:** ' + organization + '\n' +
+                   '**Branch:** ' + branchName + '\n' +
+                   '**Timestamp:** ' + timestamp + '\n\n' +
+                   '### Changes\n' +
+                   '- Drift detection report\n' +
+                   '- Configuration updates\n' +
+                   '- Environment: ' + environment + '\n' +
+                   '- Organization: ' + organization + '\n\n' +
+                   'Please review the drift detection results.';
+          }
+
+          const { data: pullRequest } = await github.rest.pulls.create({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            title: title,
+            head: branchName,
+            base: 'main',
+            body: body
+          });
+
+          console.log('🎯 Created PR #' + pullRequest.number + ': ' + pullRequest.title);
+          console.log('📝 PR URL: ' + pullRequest.html_url);
+
+          core.setOutput('pr-number', pullRequest.number);
+          core.setOutput('pr-url', pullRequest.html_url);
+
+    - name: No drift notification
+      if: steps.pr-decision.outputs.create-pr == 'false'
       run: |
-        echo "✅ No drift detected - all rules are in sync with desired state"
+        echo "ℹ️ No drift detected:"
+        echo "   - Drift found: ${{ steps.detect-drift.outputs.drift_found }}"
+        echo "   - Changes detected: ${{ steps.check-changes.outputs.changes-detected }}"
+        echo "   - All configurations are in sync ✅"
