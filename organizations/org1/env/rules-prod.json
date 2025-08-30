@@ -22,26 +22,32 @@
     "customDetails": {}
   },
   {
-    "name": "customrule2",
-    "displayName": "CustomRule2",
-    "kqlFile": "customrule2.kql",
     "severity": "Medium",
-    "enabled": true,
-    "frequency": "PT5M",
+    "customDetails": {},
+    "displayName": "CustomRule2",
+    "enabled": false,
     "period": "PT5M",
+    "entities": {
+      "entityType": "Account",
+      "fieldMappings": [
+        {
+          "columnName": "Caller",
+          "identifier": "AadUserId"
+        }
+      ]
+    },
+    "grouping": {
+      "matchingMethod": "AllEntities",
+      "enabled": null
+    },
+    "name": "customrule2",
+    "createIncident": true,
     "tactics": [
       "InitialAccess"
     ],
-    "techniques": [],
-    "createIncident": true,
-    "grouping": {
-      "enabled": false,
-      "matchingMethod": "AllEntities"
-    },
-    "entities": {
-      "accountFullName": "Caller"
-    },
-    "customDetails": {}
+    "kqlFile": "customrule2.kql",
+    "frequency": "PT5M",
+    "techniques": []
   },
   {
     "name": "customrule3",
