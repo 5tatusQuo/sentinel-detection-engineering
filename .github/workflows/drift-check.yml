@@ -1,26 +1,36 @@
-name: Drift Detection
+name: Drift Detection & Sync
 
 on:
   schedule:
-    # Run weekly on Sundays at 3 AM UTC
-    - cron: '0 3 * * 0'
+    # Run nightly at 3 AM UTC
+    - cron: '0 3 * * *'
   workflow_dispatch:
     inputs:
       environment:
-        description: 'Environment to check for drift'
+        description: 'Environment to sync from'
         required: true
         type: choice
         options:
           - dev
           - prod
-        default: 'prod'
+        default: 'dev'
+      branch_name:
+        description: 'Branch name (leave empty for auto-generated)'
+        required: false
+        type: string
+        default: ''
+      rule_name:
+        description: 'Specific rule name to sync (leave empty for all custom rules)'
+        required: false
+        type: string
+        default: ''
       organization:
-        description: 'Organization to check (e.g., org1, org2, client-name)'
+        description: 'Organization to sync (e.g., org1, org2, client-name)'
         required: true
         type: string
         default: ''
-      force_check:
-        description: 'Force drift check even if no changes expected'
+      force_sync:
+        description: 'Force sync even if no changes detected'
         required: false
         type: boolean
         default: false
@@ -36,7 +46,7 @@ env:
   AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
 jobs:
-  detect-drift:
+  drift-sync:
     runs-on: ubuntu-latest
 
     steps:
@@ -63,11 +73,35 @@ jobs:
         az bicep install
         az bicep version
 
+    - name: Set workflow parameters
+      id: params
+      run: |
+        # Set defaults for scheduled runs vs manual runs
+        if [ "${{ github.event_name }}" == "schedule" ]; then
+          echo "🕐 Scheduled run - using default parameters"
+          echo "environment=prod" >> $GITHUB_OUTPUT
+          echo "organization=org1" >> $GITHUB_OUTPUT
+          echo "rule_name=" >> $GITHUB_OUTPUT
+          echo "force_sync=false" >> $GITHUB_OUTPUT
+          echo "branch_name=" >> $GITHUB_OUTPUT
+        else
+          echo "👤 Manual run - using provided parameters"
+          echo "environment=${{ inputs.environment }}" >> $GITHUB_OUTPUT
+          echo "organization=${{ inputs.organization }}" >> $GITHUB_OUTPUT
+          echo "rule_name=${{ inputs.rule_name }}" >> $GITHUB_OUTPUT
+          echo "force_sync=${{ inputs.force_sync }}" >> $GITHUB_OUTPUT
+          echo "branch_name=${{ inputs.branch_name }}" >> $GITHUB_OUTPUT
+        fi
+
     - name: Generate branch name
       id: branch-name
       run: |
-        TIMESTAMP=$(date -u +'%Y%m%d-%H%M%S')
-        BRANCH_NAME="drift/${{ inputs.environment }}-$TIMESTAMP"
+        if [ -n "${{ steps.params.outputs.branch_name }}" ]; then
+          BRANCH_NAME="${{ steps.params.outputs.branch_name }}"
+        else
+          TIMESTAMP=$(date -u +'%Y%m%d-%H%M%S')
+          BRANCH_NAME="drift/${{ steps.params.outputs.environment }}-$TIMESTAMP"
+        fi
         echo "branch-name=$BRANCH_NAME" >> $GITHUB_OUTPUT
         echo "📝 Using branch: $BRANCH_NAME"
 
@@ -80,10 +114,10 @@ jobs:
     - name: Detect drift and sync changes
       id: sync
       run: |
-        echo "🔍 Starting drift detection and sync from ${{ inputs.environment }} environment..."
+        echo "🔍 Starting drift detection and sync from ${{ steps.params.outputs.environment }} environment..."
         
         # Set environment-specific secrets
-        if [ "${{ inputs.environment }}" == "dev" ]; then
+        if [ "${{ steps.params.outputs.environment }}" == "dev" ]; then
           RG_SECRET="${{ secrets.SENTINEL_RG_DEV }}"
           WS_SECRET="${{ secrets.SENTINEL_WS_DEV }}"
         else
@@ -96,10 +130,10 @@ jobs:
         SYNC_OUTPUT=$(pwsh -File scripts/sync-sentinel-changes.ps1 \
           -ResourceGroup "$RG_SECRET" \
           -WorkspaceName "$WS_SECRET" \
-          -Environment "${{ inputs.environment }}" \
-          -Organization "${{ inputs.organization }}" \
-          -ForceSync:false \
-          -RuleName "" 2>&1)
+          -Environment "${{ steps.params.outputs.environment }}" \
+          -Organization "${{ steps.params.outputs.organization }}" \
+          -ForceSync:${{ steps.params.outputs.force_sync }} \
+          -RuleName "${{ steps.params.outputs.rule_name }}" 2>&1)
         
         echo "$SYNC_OUTPUT"
         
@@ -162,7 +196,7 @@ jobs:
         if [ "${{ steps.check-changes.outputs.changes-detected }}" == "true" ]; then
           echo "📝 Committing sync changes..."
           git add .
-          git commit -m "${{ steps.sync.outputs.gitops-alert == 'true' && '🚨 GitOps sync and deployment required' || '🔍 Drift sync' }} from ${{ inputs.environment }} - ${{ steps.date.outputs.timestamp }}"
+          git commit -m "${{ steps.sync.outputs.gitops-alert == 'true' && '🚨 GitOps sync and deployment required' || '🔍 Drift sync' }} from ${{ steps.params.outputs.environment }} - ${{ steps.date.outputs.timestamp }}"
         elif [ "${{ steps.sync.outputs.gitops-alert }}" == "true" ]; then
           echo "📝 Creating empty commit for GitOps deployment trigger..."
           git commit --allow-empty -m "🚨 GitOps deployment required: Deploy missing rules to prod - ${{ steps.sync.outputs.missing-rules }} - Timestamp: ${{ steps.date.outputs.timestamp }}"
@@ -182,8 +216,9 @@ jobs:
         script: |
           const hasChanges = '${{ steps.check-changes.outputs.changes-detected }}' === 'true';
           const hasGitOpsAlert = '${{ steps.sync.outputs.gitops-alert }}' === 'true';
-          const environment = '${{ inputs.environment }}';
-          const organization = '${{ inputs.organization }}';
+          const environment = '${{ steps.params.outputs.environment }}';
+          const organization = '${{ steps.params.outputs.organization }}';
+          const ruleName = '${{ steps.params.outputs.rule_name }}' || 'All custom rules';
           const branchName = '${{ steps.branch-name.outputs.branch-name }}';
           const timestamp = '${{ steps.date.outputs.timestamp }}';
           const today = '${{ steps.date.outputs.today }}';
@@ -198,6 +233,7 @@ jobs:
                    '**Environment:** ' + environment + '\n' +
                    '**Organization:** ' + organization + '\n' +
                    '**Branch:** ' + branchName + '\n' +
+                   '**Rule:** ' + ruleName + '\n' +
                    '**Timestamp:** ' + timestamp + '\n\n' +
                    '### 🚨 Rules Missing in Production\n\n' +
                    'The following rules exist in dev but are missing from production:\n' +
@@ -214,6 +250,7 @@ jobs:
                    '**Environment:** ' + environment + '\n' +
                    '**Organization:** ' + organization + '\n' +
                    '**Branch:** ' + branchName + '\n' +
+                   '**Rule:** ' + ruleName + '\n' +
                    '**Timestamp:** ' + timestamp + '\n\n' +
                    '### What happened?\n' +
                    'Configuration drift was detected - rules were modified directly in the Azure portal and need to be synced back to Git.\n\n' +
