@@ -1,4 +1,4 @@
-name: Deploy Detection Rules
+name: Deploy to Prod
 
 on:
   push:
