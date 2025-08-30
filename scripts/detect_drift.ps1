@@ -19,6 +19,9 @@
 .PARAMETER ApiVersion
     API version to use (defaults to 2025-06-01)
 
+.PARAMETER Organization
+    Organization name (e.g., org1, org2) to determine Bicep file location
+
 .EXAMPLE
     .\detect_drift.ps1
 #>
@@ -27,7 +30,8 @@ param(
     [string]$SubscriptionId = $env:SUBSCRIPTION_ID,
     [string]$ResourceGroup = $env:RESOURCE_GROUP,
     [string]$Workspace = $env:WORKSPACE,
-    [string]$ApiVersion = $env:API_VERSION
+    [string]$ApiVersion = $env:API_VERSION,
+    [string]$Organization = $env:ORGANIZATION
 )
 
 # Set default API version if not provided
@@ -95,7 +99,16 @@ Write-Host "Found $($allRules.Count) rules in workspace" -ForegroundColor Green
 
 # Build desired state from Bicep templates
 $desiredRules = @{}
-$bicepFiles = Get-ChildItem -Path "env" -Filter "deploy-*.bicep" -Recurse
+
+# Determine the correct path for Bicep files based on organization
+if ($Organization) {
+    $bicepPath = "organizations/$Organization/env"
+} else {
+    $bicepPath = "env"
+}
+
+Write-Host "Looking for Bicep files in: $bicepPath" -ForegroundColor Yellow
+$bicepFiles = Get-ChildItem -Path $bicepPath -Filter "deploy-*.bicep" -Recurse
 
 Write-Host "Processing $($bicepFiles.Count) Bicep templates" -ForegroundColor Yellow
 

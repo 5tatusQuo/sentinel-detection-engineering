@@ -88,13 +88,11 @@ jobs:
 
         # Run drift detection script
         echo "Running drift detection script..."
-        DRIFT_OUTPUT=$(pwsh -File scripts/detect_drift.ps1 \
+        pwsh -File scripts/detect_drift.ps1 \
           -SubscriptionId "$AZURE_SUBSCRIPTION_ID" \
           -ResourceGroup "$RG_SECRET" \
           -Workspace "$WS_SECRET" \
-          -Organization "${{ inputs.organization }}" 2>&1)
-
-        echo "$DRIFT_OUTPUT"
+          -Organization "${{ inputs.organization }}"
 
         # Check exit code to determine if drift was found
         if [ $? -eq 0 ]; then
