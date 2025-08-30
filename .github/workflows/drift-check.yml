@@ -58,6 +58,11 @@ jobs:
         tenant-id: ${{ secrets.AZURE_TENANT_ID }}
         subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
+    - name: Install Bicep CLI
+      run: |
+        az bicep install
+        az bicep version
+
     - name: Generate branch name
       id: branch-name
       run: |

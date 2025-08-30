@@ -57,9 +57,12 @@ if (-not $Workspace) {
 
 Write-Host "Detecting drift in workspace: $Workspace" -ForegroundColor Green
 
-# Get access token
+# Get access token using Azure CLI
 try {
-    $token = (Get-AzAccessToken -ResourceUrl "https://management.azure.com").Token
+    $token = (az account get-access-token --resource=https://management.azure.com --query accessToken -o tsv).Trim()
+    if (-not $token) {
+        throw "Failed to obtain access token - token is empty"
+    }
     Write-Host "Successfully obtained access token" -ForegroundColor Green
 }
 catch {
