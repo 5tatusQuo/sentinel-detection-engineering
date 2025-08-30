@@ -40,19 +40,52 @@ if (-not $ApiVersion) {
 }
 
 # Validate required parameters
-if (-not $SubscriptionId) {
-    Write-Error "SUBSCRIPTION_ID environment variable is required"
+if (-not $Organization) {
+    Write-Error "Organization parameter is required"
     exit 1
 }
 
+# Get subscription ID dynamically if not provided
+if (-not $SubscriptionId) {
+    try {
+        $SubscriptionId = (az account show --query id -o tsv).Trim()
+        if (-not $SubscriptionId) {
+            throw "Could not get subscription ID from Azure CLI"
+        }
+        Write-Host "Got subscription ID dynamically: $SubscriptionId" -ForegroundColor Green
+    }
+    catch {
+        Write-Error "Failed to get subscription ID: $_"
+        Write-Error "Please ensure you're logged in with 'az login' or provide SUBSCRIPTION_ID environment variable"
+        exit 1
+    }
+} else {
+    Write-Host "Using provided subscription ID: $SubscriptionId" -ForegroundColor Green
+}
+
+# Use correct values from config if not provided
 if (-not $ResourceGroup) {
-    Write-Error "RESOURCE_GROUP environment variable is required"
-    exit 1
+    if ($Organization -eq "org1") {
+        $ResourceGroup = "sentinel-ws-dev"  # From config/organizations.json
+        Write-Host "Using resource group from config: $ResourceGroup" -ForegroundColor Green
+    } else {
+        Write-Error "RESOURCE_GROUP environment variable is required or Organization must be 'org1'"
+        exit 1
+    }
+} else {
+    Write-Host "Using provided resource group: $ResourceGroup" -ForegroundColor Green
 }
 
 if (-not $Workspace) {
-    Write-Error "WORKSPACE environment variable is required"
-    exit 1
+    if ($Organization -eq "org1") {
+        $Workspace = "sentinel-rg-dev"  # From config/organizations.json
+        Write-Host "Using workspace from config: $Workspace" -ForegroundColor Green
+    } else {
+        Write-Error "WORKSPACE environment variable is required or Organization must be 'org1'"
+        exit 1
+    }
+} else {
+    Write-Host "Using provided workspace: $Workspace" -ForegroundColor Green
 }
 
 Write-Host "Detecting drift in workspace: $Workspace" -ForegroundColor Green
@@ -61,7 +94,13 @@ Write-Host "Detecting drift in workspace: $Workspace" -ForegroundColor Green
 try {
     $token = (az account get-access-token --resource=https://management.azure.com --query accessToken -o tsv).Trim()
     if (-not $token) {
-        throw "Failed to obtain access token - token is empty"
+        # For local testing without Azure auth, use dummy token
+        if ($SubscriptionId -eq "dummy") {
+            $token = "dummy-token"
+            Write-Host "Using dummy token for local testing" -ForegroundColor Yellow
+        } else {
+            throw "Failed to obtain access token - token is empty"
+        }
     }
     Write-Host "Successfully obtained access token" -ForegroundColor Green
 }
@@ -84,24 +123,76 @@ $allRules = @()
 $nextLink = $url
 
 # Fetch all rules (handle pagination)
-do {
-    Write-Host "Fetching rules from: $nextLink" -ForegroundColor Yellow
-    
-    try {
-        $response = Invoke-RestMethod -Uri $nextLink -Headers $headers -Method Get
-        $allRules += $response.value
-        $nextLink = $response.nextLink
-    }
-    catch {
-        Write-Error "Failed to fetch rules: $_"
-        exit 1
-    }
-} while ($nextLink)
+if ($SubscriptionId -eq "dummy") {
+    # For local testing, use dummy rules
+    Write-Host "Using dummy rules for local testing" -ForegroundColor Yellow
+    $allRules = @(
+        @{
+            name = "customrule1"
+            properties = @{
+                displayName = "CustomRule1"
+                enabled = $true
+                severity = "Medium"
+                query = "AzureActivity | take 10"
+                tactics = @("InitialAccess")
+                techniques = @()
+                incidentConfiguration = @{
+                    createIncident = $true
+                    groupingConfiguration = @{ enabled = $false }
+                }
+            }
+        },
+        @{
+            name = "customrule2"
+            properties = @{
+                displayName = "CustomRule2"
+                enabled = $true
+                severity = "Medium"
+                query = "AzureActivity | take 10"
+                tactics = @("InitialAccess")
+                techniques = @()
+                incidentConfiguration = @{
+                    createIncident = $true
+                    groupingConfiguration = @{ enabled = $false }
+                }
+            }
+        },
+        @{
+            name = "vendor-rule-1"
+            properties = @{
+                displayName = "Vendor Rule 1"
+                enabled = $true
+                severity = "Low"
+                query = "SecurityEvent | take 5"
+            }
+        }
+    )
+    Write-Host "Found $($allRules.Count) dummy rules in workspace" -ForegroundColor Green
+} else {
+    # Real API calls
+    do {
+        Write-Host "Fetching rules from: $nextLink" -ForegroundColor Yellow
 
-Write-Host "Found $($allRules.Count) rules in workspace" -ForegroundColor Green
+        try {
+            $response = Invoke-RestMethod -Uri $nextLink -Headers $headers -Method Get
+            $allRules += $response.value
+            $nextLink = $response.nextLink
+        }
+        catch {
+            Write-Error "Failed to fetch rules: $_"
+            exit 1
+        }
+    } while ($nextLink)
+
+    Write-Host "Found $($allRules.Count) rules in workspace" -ForegroundColor Green
+}
 
 # Build desired state from Bicep templates
 $desiredRules = @{}
+
+# Change to repository root directory (important for GitHub Actions)
+Set-Location $PSScriptRoot/..
+Write-Host "Changed to repository root: $(Get-Location)" -ForegroundColor Green
 
 # Determine the correct path for Bicep files based on organization
 if ($Organization) {
@@ -111,26 +202,75 @@ if ($Organization) {
 }
 
 Write-Host "Looking for Bicep files in: $bicepPath" -ForegroundColor Yellow
-$bicepFiles = Get-ChildItem -Path $bicepPath -Filter "deploy-*.bicep" -Recurse
+Write-Host "Absolute path: $(Resolve-Path $bicepPath -ErrorAction SilentlyContinue)" -ForegroundColor Yellow
+
+if (Test-Path $bicepPath) {
+    Write-Host "Path exists: $bicepPath" -ForegroundColor Green
+    $bicepFiles = Get-ChildItem -Path $bicepPath -Filter "deploy-*.bicep" -Recurse
+    Write-Host "Found $($bicepFiles.Count) Bicep files" -ForegroundColor Yellow
+    foreach ($file in $bicepFiles) {
+        Write-Host "  - $($file.FullName)" -ForegroundColor Cyan
+    }
+} else {
+    Write-Host "Path does not exist: $bicepPath" -ForegroundColor Red
+    Write-Host "Available directories:" -ForegroundColor Yellow
+    Get-ChildItem -Directory | ForEach-Object { Write-Host "  - $($_.Name)" -ForegroundColor Yellow }
+    $bicepFiles = @()
+}
 
 Write-Host "Processing $($bicepFiles.Count) Bicep templates" -ForegroundColor Yellow
+Write-Host "Found Bicep files: $($bicepFiles | ForEach-Object { $_.Name })" -ForegroundColor Yellow
 
 foreach ($bicepFile in $bicepFiles) {
     try {
+        Write-Host "Processing Bicep file: $($bicepFile.Name)" -ForegroundColor Yellow
+        Write-Host "Full path: $($bicepFile.FullName)" -ForegroundColor Yellow
+
         # Build Bicep template to get compiled output
-        $buildOutput = az bicep build --file $bicepFile.FullName --stdout 2>$null
-        
+        Write-Host "Building Bicep template: $($bicepFile.FullName)" -ForegroundColor Yellow
+        $buildOutput = az bicep build --file $bicepFile.FullName --stdout 2>&1
+
+        Write-Host "Build exit code: $LASTEXITCODE" -ForegroundColor Yellow
+        if ($buildOutput) {
+            Write-Host "Build output length: $($buildOutput.Length)" -ForegroundColor Yellow
+        }
+
         if ($LASTEXITCODE -ne 0) {
             Write-Warning "Failed to build Bicep template: $($bicepFile.Name)"
+            Write-Warning "Build output: $buildOutput"
+            Write-Host "Checking if Bicep CLI is available..." -ForegroundColor Yellow
+            $bicepVersion = az bicep version 2>&1
+            Write-Host "Bicep version check: $bicepVersion" -ForegroundColor Yellow
             continue
         }
-        
+
+        Write-Host "Successfully built Bicep template: $($bicepFile.Name)" -ForegroundColor Green
+
         $template = $buildOutput | ConvertFrom-Json
 
-        # Extract rule properties from template variables (for modular Bicep templates)
-        if ($template.variables -and $template.variables.rules) {
-            foreach ($rule in $template.variables.rules) {
+        Write-Host "Template has variables: $($template.variables -ne $null)" -ForegroundColor Yellow
+
+        # Check for ARM template copy-generated variables (compiled Bicep)
+        $rulesArray = $null
+        if ($template.variables) {
+            # Look for the compiled Bicep variable that contains the rules
+            $fxvKey = $template.variables.PSObject.Properties | Where-Object { $_.Name -like '$fxv*' } | Select-Object -First 1
+            if ($fxvKey) {
+                $rulesArray = $fxvKey.Value
+                Write-Host "Found rules in ARM copy variable: $($fxvKey.Name)" -ForegroundColor Green
+            }
+            # Also check for direct rules variable (fallback)
+            elseif ($template.variables.rules) {
+                $rulesArray = $template.variables.rules
+                Write-Host "Found rules in variables.rules" -ForegroundColor Green
+            }
+        }
+
+        if ($rulesArray) {
+            Write-Host "Found $($rulesArray.Count) rules in variables" -ForegroundColor Green
+            foreach ($rule in $rulesArray) {
                 $ruleName = $rule.name
+                Write-Host "Adding rule: $ruleName" -ForegroundColor Green
                 $desiredRules[$ruleName] = @{
                     displayName = $rule.displayName
                     enabled = $rule.enabled
@@ -147,7 +287,9 @@ foreach ($bicepFile in $bicepFiles) {
 
         # Also check for direct alert rule resources (fallback for non-modular templates)
         if ($template.resources) {
+            Write-Host "Template has $($template.resources.Count) resources" -ForegroundColor Yellow
             foreach ($resource in $template.resources.PSObject.Properties) {
+                Write-Host "Resource type: $($resource.Value.type)" -ForegroundColor Yellow
                 if ($resource.Value.type -eq "Microsoft.SecurityInsights/alertRules") {
                     $ruleName = $resource.Value.name
                     $properties = $resource.Value.properties
@@ -173,6 +315,14 @@ foreach ($bicepFile in $bicepFiles) {
 }
 
 Write-Host "Found $($desiredRules.Count) desired rules" -ForegroundColor Green
+Write-Host "Desired rules: $($desiredRules.Keys -join ', ')" -ForegroundColor Yellow
+
+# For local testing with dummy values, continue with drift comparison
+if ($SubscriptionId -eq "dummy" -and $desiredRules.Count -gt 0) {
+    Write-Host "✅ SUCCESS: Found desired rules in Bicep templates!" -ForegroundColor Green
+    Write-Host "This means the Bicep parsing is working correctly." -ForegroundColor Green
+    Write-Host "Continuing with drift comparison..." -ForegroundColor Yellow
+}
 
 # Compare desired vs actual state
 $driftReport = @{

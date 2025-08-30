@@ -91,13 +91,15 @@ jobs:
           WS_SECRET="${{ secrets.SENTINEL_WS_PROD }}"
         fi
 
+        # Set environment variables for the script
+        export SUBSCRIPTION_ID="$AZURE_SUBSCRIPTION_ID"
+        export RESOURCE_GROUP="$RG_SECRET"
+        export WORKSPACE="$WS_SECRET"
+        export ORGANIZATION="${{ inputs.organization }}"
+
         # Run drift detection script
         echo "Running drift detection script..."
-        pwsh -File scripts/detect_drift.ps1 \
-          -SubscriptionId "$AZURE_SUBSCRIPTION_ID" \
-          -ResourceGroup "$RG_SECRET" \
-          -Workspace "$WS_SECRET" \
-          -Organization "${{ inputs.organization }}"
+        pwsh -File scripts/detect_drift.ps1
 
         # Check exit code to determine if drift was found
         if [ $? -eq 0 ]; then
