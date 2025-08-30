@@ -126,23 +126,43 @@ foreach ($bicepFile in $bicepFiles) {
         }
         
         $template = $buildOutput | ConvertFrom-Json
-        
-        # Extract rule properties from template
-        foreach ($resource in $template.resources.PSObject.Properties) {
-            if ($resource.Value.type -eq "Microsoft.SecurityInsights/alertRules") {
-                $ruleName = $resource.Value.name
-                $properties = $resource.Value.properties
-                
+
+        # Extract rule properties from template variables (for modular Bicep templates)
+        if ($template.variables -and $template.variables.rules) {
+            foreach ($rule in $template.variables.rules) {
+                $ruleName = $rule.name
                 $desiredRules[$ruleName] = @{
-                    displayName = $properties.displayName
-                    enabled = $properties.enabled
-                    severity = $properties.severity
-                    query = $properties.query
-                    tactics = $properties.tactics
-                    techniques = $properties.techniques
-                    createIncident = $properties.incidentConfiguration.createIncident
-                    groupAlerts = $properties.incidentConfiguration.groupingConfiguration.enabled
+                    displayName = $rule.displayName
+                    enabled = $rule.enabled
+                    severity = $rule.severity
+                    query = $rule.kql
+                    tactics = $rule.tactics
+                    techniques = $rule.techniques
+                    createIncident = $rule.createIncident
+                    groupAlerts = $rule.grouping.enabled
                     source = "Bicep: $($bicepFile.Name)"
+                }
+            }
+        }
+
+        # Also check for direct alert rule resources (fallback for non-modular templates)
+        if ($template.resources) {
+            foreach ($resource in $template.resources.PSObject.Properties) {
+                if ($resource.Value.type -eq "Microsoft.SecurityInsights/alertRules") {
+                    $ruleName = $resource.Value.name
+                    $properties = $resource.Value.properties
+
+                    $desiredRules[$ruleName] = @{
+                        displayName = $properties.displayName
+                        enabled = $properties.enabled
+                        severity = $properties.severity
+                        query = $properties.query
+                        tactics = $properties.tactics
+                        techniques = $properties.techniques
+                        createIncident = $properties.incidentConfiguration.createIncident
+                        groupAlerts = $properties.incidentConfiguration.groupingConfiguration.enabled
+                        source = "Bicep: $($bicepFile.Name)"
+                    }
                 }
             }
         }
