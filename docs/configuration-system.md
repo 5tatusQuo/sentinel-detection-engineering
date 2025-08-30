@@ -123,19 +123,19 @@ foreach ($org in $enabledOrgs) {
 
 5. **Test Configuration**:
    ```bash
-   pwsh -File scripts/test-config.ps1
+   pwsh -File scripts/validate-bicep.ps1
    ```
 
 ## Testing
 
 ### Validate Configuration
 ```bash
-pwsh -File scripts/test-config.ps1
+pwsh -File scripts/validate-bicep.ps1
 ```
 
 ### Test Deployment Pattern
 ```bash
-pwsh -File scripts/deploy-with-config.ps1 -Environment "dev"
+pwsh -File scripts/deploy-organizations.ps1 -Environment "dev"
 ```
 
 ## Benefits

@@ -209,12 +209,11 @@ The `config/organizations.json` file defines all organization settings:
    ```
 3. **Create Bicep Files**: Add `deploy-dev.bicep` and `deploy-prod.bicep` in `organizations/org3/env/`
 4. **Add KQL Files**: Place KQL files in `organizations/org3/kql/dev/` and `organizations/org3/kql/prod/`
-5. **Test Configuration**: Run `pwsh -File scripts/test-config.ps1` to validate
+5. **Test Configuration**: Run `pwsh -File scripts/validate-bicep.ps1` to validate
 
 ### Configuration Management Scripts
 - **`scripts/ConfigManager.ps1`**: PowerShell module for configuration management
-- **`scripts/test-config.ps1`**: Validates configuration and file structure
-- **`scripts/deploy-with-config.ps1`**: Example deployment using configuration system
+- **`scripts/validate-bicep.ps1`**: Validates Bicep templates and configuration structure
 
 ## 🔄 Automated Workflows
 
@@ -331,7 +330,7 @@ $enabledOrgs = Get-EnabledOrganizations -Environment "dev"
 ### Common Issues
 
 1. **Configuration Errors**
-   - Run `pwsh -File scripts/test-config.ps1` to validate
+   - Run `pwsh -File scripts/validate-bicep.ps1` to validate
    - Check JSON syntax in `config/organizations.json`
    - Verify organization directory structure
 
