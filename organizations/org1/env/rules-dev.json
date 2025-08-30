@@ -22,10 +22,17 @@
     "customDetails": {}
   },
   {
-    "severity": "Medium",
-    "customDetails": {},
+    "tactics": [
+      "InitialAccess"
+    ],
     "displayName": "CustomRule2",
-    "enabled": false,
+    "techniques": [],
+    "kqlFile": "customrule2.kql",
+    "severity": "Medium",
+    "grouping": {
+      "matchingMethod": "AllEntities",
+      "enabled": null
+    },
     "period": "PT5M",
     "entities": {
       "entityType": "Account",
@@ -36,18 +43,11 @@
         }
       ]
     },
-    "grouping": {
-      "matchingMethod": "AllEntities",
-      "enabled": null
-    },
-    "name": "customrule2",
-    "createIncident": true,
-    "tactics": [
-      "InitialAccess"
-    ],
-    "kqlFile": "customrule2.kql",
+    "customDetails": {},
     "frequency": "PT5M",
-    "techniques": []
+    "enabled": false,
+    "createIncident": true,
+    "name": "customrule2"
   },
   {
     "name": "customrule3",
