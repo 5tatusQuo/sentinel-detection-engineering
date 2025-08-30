@@ -9,21 +9,28 @@ This directory contains PowerShell scripts that help automate Microsoft Sentinel
 
 **Why you need it**: Keeps track of what vendor rules (from Microsoft and partners) you have enabled, so you can see what's running vs what's in your code.
 
-**When it runs**: Every night at 2 AM via the `vendor-sync.yml` workflow
+**When it runs**: Every day at 2 AM via the `vendor-sync.yml` workflow
 
-### `detect_drift.ps1`
-**What it does**: Compares what's in your code vs what's actually deployed in Sentinel and reports any differences.
+### `validate-bicep.ps1`
+**What it does**: Validates all Bicep templates across all organizations to ensure they compile correctly.
 
-**Why you need it**: Catches if someone manually changed something in Sentinel that's not reflected in your code.
-
-**When it runs**: Weekly on Sundays via the `drift-check.yml` workflow
-
-### `validate-kql-columns.ps1`
-**What it does**: Checks that your KQL queries actually return the columns you're referencing in entity mappings and custom details.
-
-**Why you need it**: Prevents deployment errors when your KQL doesn't return the columns you expect.
+**Why you need it**: Catches syntax errors and configuration issues before deployment.
 
 **When it runs**: During validation in the deployment workflow
+
+### `deploy-organizations.ps1`
+**What it does**: Deploys Bicep templates to all enabled organizations using the centralized configuration.
+
+**Why you need it**: Automates deployment across multiple organizations with proper environment handling.
+
+**When it runs**: During deployment workflows for dev/prod environments
+
+### `ConfigManager.ps1`
+**What it does**: PowerShell module that loads and manages organization configuration from `config/organizations.json`.
+
+**Why you need it**: Provides centralized configuration management for all multi-organization operations.
+
+**When it runs**: Used as a dependency by other scripts that need organization configuration
 
 ### `sync-sentinel-changes.ps1`
 **What it does**: Exports current Sentinel alert rules and automatically updates KQL files and JSON configurations to match the portal state. Features intelligent GitOps drift detection.
@@ -41,10 +48,9 @@ This directory contains PowerShell scripts that help automate Microsoft Sentinel
 - **Environment Parity**: Maintains consistency between dev and prod configurations
 
 **When it runs**: 
-- Manually by reviewers during the review process
-- Automatically every night for production sync
-- Via manual sync workflows for both dev and prod environments
-- Triggered by GitOps workflows when drift is detected
+- Manually via the unified "Drift Detection & Sync" workflow
+- Automatically every night at 3 AM for production sync
+- Triggered when drift is detected between portal and repository
 
 ## 🚀 How to Use These Scripts
 
@@ -77,21 +83,21 @@ $env:API_VERSION = "2025-06-01"
 
 **Output**: JSON files in `rules/vendor/enabled/` with names like `{resourceName}__{safeDisplayName}.json`
 
-#### Detect Drift
+#### Validate Bicep Templates
 ```powershell
-# Compare code vs deployed state
-.\scripts\detect_drift.ps1
+# Validate all organization Bicep templates
+.\scripts\validate-bicep.ps1
 ```
 
-**Output**: `drift-report.md` with detailed comparison results
+**Output**: Validation results for all organizations
 
-#### Validate KQL Columns
+#### Deploy Organizations
 ```powershell
-# Validate KQL columns for a specific rule
-pwsh scripts/validate-kql-columns.ps1 \
-  -KqlFile kql/your-rule.kql \
-  -EntityMappings '[{"entityType":"Account","fieldMappings":[{"identifier":"FullName","columnName":"SubjectUserName"}]}]' \
-  -CustomDetails '{"CustomField":"ColumnName"}'
+# Deploy to all enabled organizations (dev environment)
+.\scripts\deploy-organizations.ps1 -Environment "dev"
+
+# Deploy to production
+.\scripts\deploy-organizations.ps1 -Environment "prod"
 ```
 
 #### Sync Sentinel Changes
@@ -136,9 +142,9 @@ az account set --subscription "your-subscription-id"
 These scripts are automatically used by the GitHub Actions workflows:
 
 - **`vendor-sync.yml`** uses `export_enabled_rules.ps1` to sync vendor rules
-- **`drift-check.yml`** uses `detect_drift.ps1` to check for drift
-- **`deploy.yml`** uses `validate-kql-columns.ps1` during validation
-- **Reviewers** use `sync-sentinel-changes.ps1` to sync portal changes back to repository
+- **`drift-check.yml`** uses `sync-sentinel-changes.ps1` for drift detection and sync
+- **`deploy.yml`** uses `validate-bicep.ps1` and `deploy-organizations.ps1` for deployment
+- **All workflows** use `ConfigManager.ps1` for organization configuration management
 
 ## 🆘 Troubleshooting
 
@@ -175,7 +181,8 @@ Add `-Verbose` to see detailed execution:
 ```powershell
 # See detailed output
 .\scripts\export_enabled_rules.ps1 -Verbose
-.\scripts\detect_drift.ps1 -Verbose
+.\scripts\sync-sentinel-changes.ps1 -Verbose
+.\scripts\validate-bicep.ps1 -Verbose
 ```
 
 ### Getting Help
@@ -198,13 +205,15 @@ Exported: rules/vendor/enabled/Microsoft_Sentinel__Brute_Force_Attack.json
 Export completed successfully
 ```
 
-### Drift Detection Output
+### Sync Changes Output
 ```
-Comparing desired state vs actual state...
-Found 2 rules with differences:
-- Rule 'uc-powershell-encoded': Severity changed from 'Medium' to 'High'
-- Rule 'uc-suspicious-login': Query frequency changed from 'PT1H' to 'PT30M'
-Drift report saved to: drift-report.md
+Syncing rules from workspace: sentinel-ws-dev
+Found 3 custom rules to sync
+Updated: organizations/org1/kql/dev/customrule2.kql
+Updated: organizations/org1/env/rules-dev.json
+🚨 GitOps Alert: 1 rules need deployment to prod
+   - CustomRule2
+💡 Create a PR to deploy these rules to production
 ```
 
 ---

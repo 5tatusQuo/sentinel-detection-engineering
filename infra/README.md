@@ -52,7 +52,8 @@ scripts/
 ├── sync-sentinel-changes.ps1     # Sync rules from portal to Bicep
 ├── ConfigManager.ps1             # Organization configuration management
 ├── validate-bicep.ps1            # Bicep validation for all orgs
-└── deploy-organizations.ps1      # Deploy to all organizations
+├── deploy-organizations.ps1      # Deploy to all organizations
+└── export_enabled_rules.ps1      # Export vendor rules
 ```
 
 ## 🚀 Adding a New Rule (Step by Step)
@@ -232,6 +233,7 @@ The repository uses a centralized configuration system to manage multiple organi
 - **`deploy-organizations.ps1`**: Deploys to all enabled organizations
 - **`validate-bicep.ps1`**: Validates Bicep files for all organizations
 - **`sync-sentinel-changes.ps1`**: Syncs portal rules to Bicep files
+- **`export_enabled_rules.ps1`**: Exports vendor rules from workspaces
 
 ## 🔄 Deployment
 
@@ -240,8 +242,8 @@ The GitHub Actions workflows automatically handle deployment:
 ### Automated Workflows
 1. **Deploy**: Automatically deploys to all enabled organizations when Bicep files change
 2. **Validate**: Validates all organization Bicep files before deployment
-3. **Manual Sync**: Syncs rules from Azure Sentinel portal to Bicep files
-4. **Vendor Sync**: Syncs vendor-built rules for all organizations
+3. **Drift Detection & Sync**: Unified workflow for drift detection and portal sync
+4. **Vendor Sync**: Exports vendor-built rules for all organizations
 
 ### Configuration-Driven Deployment
 - **Central Config**: `config/organizations.json` defines all organizations and environments

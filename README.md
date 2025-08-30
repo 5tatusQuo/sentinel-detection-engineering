@@ -13,7 +13,7 @@ A **configuration-driven**, multi-organization system for creating and deploying
    - Avoids configuration errors and syntax issues
    - Provides immediate testing and validation
 
-2. **Run Manual Sync** - Go to Actions → **Manual Sync from Sentinel** → **Run workflow**
+2. **Run Drift Detection & Sync** - Go to Actions → **Drift Detection & Sync** → **Run workflow**
 
 3. **Fill in the form**:
    - Environment: `dev` (for testing)
@@ -91,12 +91,10 @@ A **configuration-driven**, multi-organization system for creating and deploying
 
 ### Workflow Triggers
 
-- **Manual Sync**: Portal changes → Feature branch → PR
+- **Drift Detection & Sync**: Portal changes → Feature branch → PR (Manual or Nightly)
 - **GitOps Drift Detection**: Missing rules in prod → Automatic PR creation
-- **Nightly Sync**: Production changes → Feature branch → PR (custom rules)
-- **Nightly Sync**: Production changes → Main branch (vendor rules)
 - **Deployment**: Feature branches → Dev, Main → Prod
-- **Drift Detection**: Weekly checks → Feature branch with report
+- **Vendor Sync**: Export vendor rules → Feature branch → PR
 
 ### ✨ Key Features
 
@@ -112,9 +110,7 @@ A **configuration-driven**, multi-organization system for creating and deploying
 ```
 ├── .github/workflows/
 │   ├── deploy.yml              # Main deployment workflow
-│   ├── manual-sync.yml         # Manual sync workflow
-│   ├── nightly-sync.yml        # Nightly sync workflow
-│   ├── drift-check.yml         # Drift detection workflow
+│   ├── drift-check.yml         # Unified drift detection & sync workflow
 │   └── vendor-sync.yml         # Vendor rule export workflow
 ├── config/
 │   └── organizations.json      # Centralized organization configuration
@@ -145,12 +141,9 @@ A **configuration-driven**, multi-organization system for creating and deploying
 ├── scripts/
 │   ├── ConfigManager.ps1       # Configuration management module
 │   ├── sync-sentinel-changes.ps1 # Portal-to-repo sync script
-│   ├── test-config.ps1         # Test configuration system
-│   ├── deploy-with-config.ps1  # Example deployment script
-│   ├── test-org-structure.ps1  # Test organizational structure
-│   ├── validate-kql-columns.ps1 # KQL validation
-│   ├── export_enabled_rules.ps1 # Export vendor rules
-│   └── detect_drift.ps1         # Detect configuration drift
+│   ├── deploy-organizations.ps1 # Deploy to all organizations
+│   ├── validate-bicep.ps1      # Bicep validation
+│   └── export_enabled_rules.ps1 # Export vendor rules
 └── docs/
     ├── configuration-system.md  # Configuration system guide
     ├── review-process.md        # Review process documentation
@@ -225,38 +218,26 @@ The `config/organizations.json` file defines all organization settings:
 
 ## 🔄 Automated Workflows
 
-### 1. Manual Sync Workflow (`manual-sync.yml`)
-**Purpose**: Sync changes from Azure Sentinel portal back to repository
-- **Trigger**: Manual via GitHub Actions
-- **Inputs**: Environment (dev/prod), Organization, Rule name (optional), Force sync
-- **Process**: Exports current rules and updates KQL/Bicep files
-- **Use Case**: Reviewers make changes in portal, sync back to repo
-- **Output**: Creates feature branch and pull request
+### 1. Drift Detection & Sync Workflow (`drift-check.yml`)
+**Purpose**: Unified workflow for drift detection and sync from Azure Sentinel portal
+- **Trigger**: 
+  - **Scheduled**: Nightly at 3 AM UTC (prod, org1 defaults)
+  - **Manual**: Via GitHub Actions with full customization
+- **Inputs**: Environment (dev/prod), Organization, Rule name (optional), Branch name, Force sync
+- **Process**: Detects drift and syncs current rules back to repository
+- **Use Case**: 
+  - Automated nightly sync to catch portal changes
+  - Manual sync when reviewers make changes in portal
+- **Output**: Creates feature branch and pull request with actual file changes
 
-### 2. Nightly Sync Workflow (`nightly-sync.yml`)
-**Purpose**: Keep repository in sync with production Sentinel workspace
-- **Schedule**: Daily at 2 AM UTC
-- **Process**: 
-  - Syncs vendor rules directly to main branch
-  - Syncs custom rules via feature branch/PR for review
-- **Benefits**: Catches manual changes, maintains consistency
-- **Multi-org**: Processes all enabled organizations
-
-### 3. Drift Detection Workflow (`drift-check.yml`)
-**Purpose**: Detect differences between code and deployed state
-- **Schedule**: Weekly on Sundays at 3 AM UTC
-- **Process**: Compares Bicep templates with actual workspace state
-- **Output**: Creates feature branch with drift report if issues found
-- **Environments**: Checks both dev and prod workspaces
-
-### 4. Vendor Rule Export Workflow (`vendor-sync.yml`)
+### 2. Vendor Rule Export Workflow (`vendor-sync.yml`)
 **Purpose**: Track vendor rules (Microsoft and partners) across organizations
 - **Schedule**: Daily at 2 AM UTC
 - **Process**: Exports enabled vendor rules for visibility
 - **Output**: Creates pull request with vendor rule updates
 - **Benefits**: Maintains inventory of vendor rules
 
-### 5. Deployment Workflow (`deploy.yml`)
+### 3. Deployment Workflow (`deploy.yml`)
 **Purpose**: Deploy detection rules to environments
 - **Trigger**: Push to main (prod) or feature branches (dev), pull requests
 - **Process**: Validates and deploys Bicep templates
@@ -269,7 +250,7 @@ The `config/organizations.json` file defines all organization settings:
 
 ### 1. Rule Creation
 - **Azure Sentinel Portal** - Create rules directly in the portal (easier GUI, safer)
-- **Manual Sync Workflow** - Run sync workflow to pull changes to repository
+- **Drift Detection & Sync Workflow** - Run unified workflow to pull changes to repository
 - **Branch Creation** - Creates a feature branch with all changes
 - **Pull Request** - Automatically creates a PR for review
 
@@ -303,8 +284,8 @@ echo "your KQL query" > organizations/org1/kql/dev/my-rule.kql
 ### Sync from Portal
 
 ```bash
-# Run manual sync workflow from GitHub Actions
-# Go to Actions → Manual Sync from Sentinel
+# Run drift detection & sync workflow from GitHub Actions
+# Go to Actions → Drift Detection & Sync
 # Fill in the form:
 # - Environment: dev (for testing)
 # - Organization: org1 (or your org)
