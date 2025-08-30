@@ -77,11 +77,11 @@ jobs:
         echo "today=$(date -u +'%Y-%m-%d')" >> $GITHUB_OUTPUT
         echo "timestamp=$(date -u +'%Y-%m-%d %H:%M UTC')" >> $GITHUB_OUTPUT
 
-    - name: Detect drift
-      id: detect-drift
+    - name: Detect drift and sync changes
+      id: sync
       run: |
-        echo "🔍 Starting drift detection in ${{ inputs.environment }} environment..."
-
+        echo "🔍 Starting drift detection and sync from ${{ inputs.environment }} environment..."
+        
         # Set environment-specific secrets
         if [ "${{ inputs.environment }}" == "dev" ]; then
           RG_SECRET="${{ secrets.SENTINEL_RG_DEV }}"
@@ -90,27 +90,29 @@ jobs:
           RG_SECRET="${{ secrets.SENTINEL_RG_PROD }}"
           WS_SECRET="${{ secrets.SENTINEL_WS_PROD }}"
         fi
-
-        # Set environment variables for the script
-        export SUBSCRIPTION_ID="$AZURE_SUBSCRIPTION_ID"
-        export RESOURCE_GROUP="$RG_SECRET"
-        export WORKSPACE="$WS_SECRET"
-        export ORGANIZATION="${{ inputs.organization }}"
-
-        # Run drift detection script
-        echo "Running drift detection script..."
-        set +e  # Temporarily disable exit on error
-        pwsh -File scripts/detect_drift.ps1
-        DRIFT_EXIT_CODE=$?
-        set -e  # Re-enable exit on error
-
-        # Check exit code to determine if drift was found
-        if [ $DRIFT_EXIT_CODE -eq 0 ]; then
-          echo "drift_found=false" >> $GITHUB_OUTPUT
-          echo "✅ No drift detected"
+        
+        # Run sync script to detect and pull changes
+        echo "Running sync script to detect drift and pull changes..."
+        SYNC_OUTPUT=$(pwsh -File scripts/sync-sentinel-changes.ps1 \
+          -ResourceGroup "$RG_SECRET" \
+          -WorkspaceName "$WS_SECRET" \
+          -Environment "${{ inputs.environment }}" \
+          -Organization "${{ inputs.organization }}" \
+          -ForceSync:false \
+          -RuleName "" 2>&1)
+        
+        echo "$SYNC_OUTPUT"
+        
+        # Check for GitOps alerts (rules missing in prod)
+        if echo "$SYNC_OUTPUT" | grep -q "GitOps Alert:"; then
+          echo "gitops-alert=true" >> $GITHUB_OUTPUT
+          MISSING_RULES=$(echo "$SYNC_OUTPUT" | grep -A 10 "GitOps Alert:" | grep "   -" | sed 's/   - //' | tr '\n' ', ' | sed 's/, $//')
+          echo "missing-rules=$MISSING_RULES" >> $GITHUB_OUTPUT
+          echo "🚨 GitOps Alert: Rules missing in prod detected"
         else
-          echo "drift_found=true" >> $GITHUB_OUTPUT
-          echo "❌ Drift detected"
+          echo "gitops-alert=false" >> $GITHUB_OUTPUT
+          echo "missing-rules=" >> $GITHUB_OUTPUT
+          echo "✅ No GitOps alerts - all rules in sync"
         fi
 
     - name: Check for changes
@@ -118,54 +120,57 @@ jobs:
       run: |
         if [ -n "$(git status --porcelain)" ]; then
           echo "changes-detected=true" >> $GITHUB_OUTPUT
-          echo "📝 Changes detected in workspace"
+          echo "📝 Changes detected in sync"
           git status --porcelain
         else
           echo "changes-detected=false" >> $GITHUB_OUTPUT
-          echo "✅ No changes detected in workspace"
+          echo "✅ No changes detected in sync"
         fi
 
     - name: Determine PR action needed
       id: pr-decision
       run: |
-        # Create PR if drift is found OR there are file changes
-        if [ "${{ steps.detect-drift.outputs.drift_found }}" == "true" ] || [ "${{ steps.check-changes.outputs.changes-detected }}" == "true" ]; then
+        # Create PR if there are file changes OR GitOps alerts
+        if [ "${{ steps.check-changes.outputs.changes-detected }}" == "true" ] || [ "${{ steps.sync.outputs.gitops-alert }}" == "true" ]; then
           echo "create-pr=true" >> $GITHUB_OUTPUT
-          echo "🎯 PR creation needed: Drift=${{ steps.detect-drift.outputs.drift_found }}, Changes=${{ steps.check-changes.outputs.changes-detected }}"
+          echo "🎯 PR creation needed: Changes=${{ steps.check-changes.outputs.changes-detected }}, GitOps Alert=${{ steps.sync.outputs.gitops-alert }}"
         else
           echo "create-pr=false" >> $GITHUB_OUTPUT
-          echo "✅ No PR needed: No drift and no changes"
+          echo "✅ No PR needed: No changes and no GitOps alerts"
         fi
 
     - name: Debug outputs
       run: |
-        echo "drift_found = ${{ steps.detect-drift.outputs.drift_found }}"
         echo "changes-detected = ${{ steps.check-changes.outputs.changes-detected }}"
+        echo "gitops-alert = ${{ steps.sync.outputs.gitops-alert }}"
+        echo "missing-rules = ${{ steps.sync.outputs.missing-rules }}"
         echo "create-pr = ${{ steps.pr-decision.outputs.create-pr }}"
 
     - name: Create branch and commit changes
       if: steps.pr-decision.outputs.create-pr == 'true'
       run: |
-        echo "🎯 Creating branch for drift detection results..."
-
+        echo "🎯 Creating branch for sync changes and/or GitOps deployment..."
+        
         # Configure Git identity for commits
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
-
+        
         # Create and switch to new branch
         git checkout -b ${{ steps.branch-name.outputs.branch-name }}
-
+        
         # If there are file changes, commit them
         if [ "${{ steps.check-changes.outputs.changes-detected }}" == "true" ]; then
-          echo "📝 Committing drift detection results..."
+          echo "📝 Committing sync changes..."
           git add .
-          git commit -m "🔍 Drift detected from ${{ inputs.environment }} - ${{ steps.date.outputs.timestamp }}"
+          git commit -m "${{ steps.sync.outputs.gitops-alert == 'true' && '🚨 GitOps sync and deployment required' || '🔍 Drift sync' }} from ${{ inputs.environment }} - ${{ steps.date.outputs.timestamp }}"
+        elif [ "${{ steps.sync.outputs.gitops-alert }}" == "true" ]; then
+          echo "📝 Creating empty commit for GitOps deployment trigger..."
+          git commit --allow-empty -m "🚨 GitOps deployment required: Deploy missing rules to prod - ${{ steps.sync.outputs.missing-rules }} - Timestamp: ${{ steps.date.outputs.timestamp }}"
         else
-          echo "📝 Creating empty commit for drift alert..."
-          git commit --allow-empty -m "🔍 Drift alert: Configuration drift detected in ${{ inputs.environment }} - ${{ steps.date.outputs.timestamp }}"
+          echo "📝 No changes and no GitOps alerts - no commit needed"
         fi
-
-        # Push the branch
+        
+        # Push the branch (even if empty for GitOps-only scenarios)
         git push origin ${{ steps.branch-name.outputs.branch-name }}
         echo "✅ Created and pushed branch: ${{ steps.branch-name.outputs.branch-name }}"
 
@@ -175,53 +180,48 @@ jobs:
       with:
         github-token: ${{ secrets.GITHUB_TOKEN }}
         script: |
-          const hasDrift = '${{ steps.detect-drift.outputs.drift_found }}' === 'true';
           const hasChanges = '${{ steps.check-changes.outputs.changes-detected }}' === 'true';
+          const hasGitOpsAlert = '${{ steps.sync.outputs.gitops-alert }}' === 'true';
           const environment = '${{ inputs.environment }}';
           const organization = '${{ inputs.organization }}';
           const branchName = '${{ steps.branch-name.outputs.branch-name }}';
           const timestamp = '${{ steps.date.outputs.timestamp }}';
           const today = '${{ steps.date.outputs.today }}';
-
+          const missingRules = '${{ steps.sync.outputs.missing-rules }}';
+          
           let title, body;
-
-          if (hasDrift) {
-            title = '🔍 Drift Detected from ' + environment + ' - ' + today;
-            body = '## Configuration Drift Detected\n\n' +
-                   '⚠️ **Configuration drift detected** between desired state (Bicep templates) and actual state (Sentinel workspace).\n\n' +
+          
+          if (hasGitOpsAlert) {
+            title = '🚨 GitOps: Deploy to Prod from ' + environment + ' - ' + today;
+            body = '## GitOps Deployment Required from ' + environment + ' Environment\n\n' +
+                   '⚠️ **This PR is required for GitOps deployment!**\n\n' +
                    '**Environment:** ' + environment + '\n' +
                    '**Organization:** ' + organization + '\n' +
                    '**Branch:** ' + branchName + '\n' +
                    '**Timestamp:** ' + timestamp + '\n\n' +
-                   '### What is drift?\n' +
-                   'Drift occurs when the actual configuration in Microsoft Sentinel differs from what\'s defined in our Bicep templates. This can happen when:\n' +
-                   '- Rules are modified directly in the Azure portal\n' +
-                   '- Manual changes bypass the GitOps workflow\n' +
-                   '- Vendor rules are updated outside our control\n\n' +
-                   '### Next Steps\n' +
-                   '1. **Review the drift report** (if attached)\n' +
-                   '2. **Investigate the differences** and determine if they\'re intentional\n' +
-                   '3. **Update Bicep templates** if the changes should be permanent\n' +
-                   '4. **Redeploy** to sync the workspace with desired state\n\n' +
+                   '### 🚨 Rules Missing in Production\n\n' +
+                   'The following rules exist in dev but are missing from production:\n' +
+                   '- ' + missingRules + '\n\n' +
+                   '**Action Required:** Merging this PR will trigger the deployment workflow to deploy these rules to production.\n\n' +
                    '### Changes\n' +
-                   (hasChanges ? '- Drift report and configuration files updated\n' : '- Drift alert (no file changes)\n') +
-                   '- Environment: ' + environment + '\n' +
-                   '- Organization: ' + organization + '\n\n' +
+                   (hasChanges ? '- Synced KQL queries and configurations\n' : '- No file changes (GitOps deployment only)\n') +
+                   '- Custom rules only (vendor rules excluded)\n\n' +
                    '⚠️ **Important:** This PR ensures dev/prod environment parity.';
           } else {
-            title = '🔍 Drift Check Results from ' + environment + ' - ' + today;
-            body = '## Drift Detection Results\n\n' +
-                   'This PR contains drift detection results from the ' + environment + ' Sentinel environment.\n\n' +
+            title = '🔍 Drift Sync from ' + environment + ' - ' + today;
+            body = '## Drift Sync from ' + environment + ' Environment\n\n' +
+                   'This PR contains changes synced from the ' + environment + ' Sentinel environment due to detected configuration drift.\n\n' +
                    '**Environment:** ' + environment + '\n' +
                    '**Organization:** ' + organization + '\n' +
                    '**Branch:** ' + branchName + '\n' +
                    '**Timestamp:** ' + timestamp + '\n\n' +
+                   '### What happened?\n' +
+                   'Configuration drift was detected - rules were modified directly in the Azure portal and need to be synced back to Git.\n\n' +
                    '### Changes\n' +
-                   '- Drift detection report\n' +
-                   '- Configuration updates\n' +
-                   '- Environment: ' + environment + '\n' +
-                   '- Organization: ' + organization + '\n\n' +
-                   'Please review the drift detection results.';
+                   '- Synced KQL queries\n' +
+                   '- Updated rule configurations\n' +
+                   '- Custom rules only (vendor rules excluded)\n\n' +
+                   'Please review the changes before merging.';
           }
 
           const { data: pullRequest } = await github.rest.pulls.create({
@@ -239,10 +239,10 @@ jobs:
           core.setOutput('pr-number', pullRequest.number);
           core.setOutput('pr-url', pullRequest.html_url);
 
-    - name: No drift notification
+    - name: No action needed notification
       if: steps.pr-decision.outputs.create-pr == 'false'
       run: |
-        echo "ℹ️ No drift detected:"
-        echo "   - Drift found: ${{ steps.detect-drift.outputs.drift_found }}"
-        echo "   - Changes detected: ${{ steps.check-changes.outputs.changes-detected }}"
-        echo "   - All configurations are in sync ✅"
+        echo "ℹ️ No action needed:"
+        echo "   - File changes: ${{ steps.check-changes.outputs.changes-detected }}"
+        echo "   - GitOps alerts: ${{ steps.sync.outputs.gitops-alert }}"
+        echo "   - All environments are in sync ✅"
