@@ -99,10 +99,13 @@ jobs:
 
         # Run drift detection script
         echo "Running drift detection script..."
+        set +e  # Temporarily disable exit on error
         pwsh -File scripts/detect_drift.ps1
+        DRIFT_EXIT_CODE=$?
+        set -e  # Re-enable exit on error
 
         # Check exit code to determine if drift was found
-        if [ $? -eq 0 ]; then
+        if [ $DRIFT_EXIT_CODE -eq 0 ]; then
           echo "drift_found=false" >> $GITHUB_OUTPUT
           echo "✅ No drift detected"
         else
