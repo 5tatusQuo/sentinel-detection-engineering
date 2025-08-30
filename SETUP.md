@@ -9,8 +9,8 @@ Replace `[ORG]` with your organization prefix throughout the repository:
 
 **Files to update:**
 - `README.md`
-- `env/deploy-dev.bicep`
-- `env/deploy-prod.bicep`
+- `organizations/*/env/deploy-dev.bicep`
+- `organizations/*/env/deploy-prod.bicep`
 - All documentation files
 
 **Example:** Replace `[ORG]` with `UBH`, `ACME`, `CORP`, etc.
@@ -125,28 +125,28 @@ az ad sp create-for-rbac \
 
 ### 5. Workspace Configuration
 
-#### Update Parameter Files
-Update the workspace names in your parameter files:
+#### Update Configuration Files
+Update workspace names and organization settings in your configuration files:
 
-**`env/params/dev.jsonc`:**
+**`config/organizations.json`:**
 ```json
 {
-  "parameters": {
-    "workspaceName": {
-      "value": "your-dev-workspace-name"
+  "organizations": [
+    {
+      "name": "org1",
+      "displayName": "Organization 1",
+      "environments": {
+        "dev": {
+          "resourceGroup": "your-dev-resource-group",
+          "workspaceName": "your-dev-workspace-name"
+        },
+        "prod": {
+          "resourceGroup": "your-prod-resource-group", 
+          "workspaceName": "your-prod-workspace-name"
+        }
+      }
     }
-  }
-}
-```
-
-**`env/params/prod.jsonc`:**
-```json
-{
-  "parameters": {
-    "workspaceName": {
-      "value": "your-prod-workspace-name"
-    }
-  }
+  ]
 }
 ```
 
@@ -158,39 +158,27 @@ Update the workspace names in your parameter files:
 az bicep build --file infra/sentinel-rules.bicep
 az bicep build --file infra/modules/scheduledRule.bicep
 
-# Test environment templates
-az bicep build --file env/deploy-dev.bicep
-az bicep build --file env/deploy-prod.bicep
+# Test organization-specific templates
+az bicep build --file organizations/org1/env/deploy-dev.bicep
+az bicep build --file organizations/org1/env/deploy-prod.bicep
 ```
 
 ### 2. Validate Deployment
 ```bash
-# What-if deployment for Dev
-az deployment group what-if \
-  --resource-group $SENTINEL_RG_DEV \
-  --template-file env/deploy-dev.bicep \
-  --parameters env/params/dev.jsonc
+# What-if deployment for Dev (using script)
+pwsh -File scripts/deploy-organizations.ps1 -Environment dev -WhatIf
 
-# What-if deployment for Prod
-az deployment group what-if \
-  --resource-group $SENTINEL_RG_PROD \
-  --template-file env/deploy-prod.bicep \
-  --parameters env/params/prod.jsonc
+# What-if deployment for Prod (using script)
+pwsh -File scripts/deploy-organizations.ps1 -Environment prod -WhatIf
 ```
 
 ### 3. Manual First Deployment
 ```bash
 # Deploy to Dev
-az deployment group create \
-  --resource-group $SENTINEL_RG_DEV \
-  --template-file env/deploy-dev.bicep \
-  --parameters env/params/dev.jsonc
+pwsh -File scripts/deploy-organizations.ps1 -Environment dev
 
 # Deploy to Prod (after approval)
-az deployment group create \
-  --resource-group $SENTINEL_RG_PROD \
-  --template-file env/deploy-prod.bicep \
-  --parameters env/params/prod.jsonc
+pwsh -File scripts/deploy-organizations.ps1 -Environment prod
 ```
 
 ## 📋 Pre-Deployment Checklist
@@ -224,10 +212,10 @@ az deployment group create \
 gh workflow run vendor-sync.yml -f workspace=dev
 ```
 
-### Test Drift Detection
+### Test Drift Detection & Sync
 ```bash
 # Manual trigger
-gh workflow run drift-check.yml -f workspace=dev
+gh workflow run drift-check.yml -f environment=dev -f organization=org1
 ```
 
 ### Test Deployment
@@ -311,7 +299,7 @@ az bicep upgrade
 
 # Validate templates
 az bicep build --file infra/sentinel-rules.bicep
-az bicep build --file env/deploy-dev.bicep
+pwsh -File scripts/validate-bicep.ps1
 ```
 
 #### PowerShell Script Issues
@@ -351,11 +339,11 @@ az account show
 
 ## 🎯 Next Steps
 
-1. **Add Your First Custom Rule**
-   - Create new KQL file in `kql/` directory
-   - Add rule configuration to `env/deploy-dev.bicep` and `env/deploy-prod.bicep`
-   - Test in Dev environment
-   - Deploy to production
+1. **Add Your First Custom Rule (Portal-First Approach)**
+   - Create and test your rule directly in the Azure Sentinel portal
+   - Use the dev environment for initial testing and refinement
+   - Once satisfied, the Drift Detection & Sync workflow will automatically detect and sync the rule back to the repository
+   - Review and merge the auto-generated pull request to deploy to production
 
 2. **Configure Monitoring**
    - Set up alerting for deployment failures
@@ -363,9 +351,9 @@ az account show
    - Track rule effectiveness
 
 3. **Team Training**
-   - Review approval process
-   - Train on data-driven Bicep development
-   - Establish review guidelines
+   - Review approval process with focus on portal-first approach
+   - Train on drift detection and sync workflow
+   - Establish review guidelines for auto-generated PRs
 
 4. **Continuous Improvement**
    - Regular process reviews
